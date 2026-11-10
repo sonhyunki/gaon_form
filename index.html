@@ -1,0 +1,1827 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>가온(GAON) 동아리 활동 · 회차 체크 홈페이지</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#0f172a',
+            brand: '#2563eb',
+          },
+          fontFamily: {
+            sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="min-h-screen pb-24">
+
+  <!-- ===================================================================== -->
+  <!-- TOP NAVIGATION BAR (일반 회원 모드 / 관리자 회원 모드 전환) -->
+  <!-- ===================================================================== -->
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 font-black text-white shadow-sm">
+          G
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+              가온(GAON) 활동 & 모임 회차 체크 시스템
+            </h1>
+            <span class="hidden rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-200 sm:inline-block">
+              스터디 · 세미나 · 프로젝트
+            </span>
+          </div>
+          <p class="text-xs text-slate-500">
+            동아리 부원별 세미나·스터디·프로젝트 참여 내역 확인 및 모임 회차·날짜 기록 홈페이지
+          </p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="flex items-center gap-2">
+        <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+          <button
+            id="nav-btn-member"
+            onclick="switchMode('member')"
+            class="rounded-lg bg-white px-3.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition sm:text-sm">
+            👤 일반 회원 조회·입력
+          </button>
+          <button
+            id="nav-btn-admin"
+            onclick="switchMode('admin')"
+            class="rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition sm:text-sm">
+            🔒 관리자 조회 <span id="admin-unlocked-badge" class="hidden ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">인증됨</span>
+          </button>
+        </div>
+
+        <button
+          onclick="openNewActivityModal()"
+          class="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition sm:text-sm">
+          + 새 활동 추가
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl">
+    <span class="text-emerald-400">✔</span>
+    <span id="toast-msg">저장되었습니다.</span>
+  </div>
+
+  <main class="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 1: 일반 회원 모드 (이름 검색 -> 본인 세미나/스터디/프로젝트 확인 & 옆에 회차 추가/날짜 입력) -->
+    <!-- ===================================================================== -->
+    <section id="mode-member" class="space-y-6">
+      <!-- Member Search Hero Box -->
+      <div class="rounded-2xl border border-blue-100 bg-gradient-to-br from-white via-white to-blue-50/60 p-5 shadow-sm sm:p-6">
+        <div class="max-w-3xl">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-100/80 px-3 py-1 text-xs font-bold text-blue-800">
+            ✨ 일반 회원 전용 — 본인 활동 확인 및 회차·날짜 입력
+          </span>
+          <h2 class="mt-2 text-xl font-extrabold text-slate-900 sm:text-2xl">
+            본인의 이름을 입력하여 참여한 스터디·세미나·프로젝트를 확인하세요
+          </h2>
+          <p class="mt-1 text-sm text-slate-600">
+            이름(또는 학번)으로 검색하면 본인이 수행한 <b>스터디, 세미나, 프로젝트</b> 목록이 표시됩니다.
+            각 활동 우측에서 <b>몇 회차 모임을 가졌는지 회차를 추가(+ 회차 추가)하고 각 회차별 날짜를 입력</b>하면 관리자 페이지에 즉시 반영됩니다.
+          </p>
+
+          <!-- Search Input Bar -->
+          <div class="mt-4 flex flex-wrap items-center gap-2">
+            <div class="relative flex-1 min-w-[240px]">
+              <input
+                id="member-search-input"
+                type="text"
+                oninput="onMemberSearchInput()"
+                onkeydown="if(event.key==='Enter') triggerMemberSearch()"
+                placeholder="본인의 이름을 입력하세요 (예: 이하은, 조승호, 최승우, 정진우, 김효제...)"
+                class="w-full rounded-xl border-2 border-slate-300 bg-white pl-10 pr-4 py-3 text-base font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+              />
+              <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+            </div>
+            <button
+              onclick="triggerMemberSearch()"
+              class="rounded-xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-sm hover:bg-blue-700 transition">
+              이름 검색
+            </button>
+            <button
+              onclick="clearMemberSearch()"
+              class="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+              초기화
+            </button>
+          </div>
+
+          <!-- Quick Member Name Chips -->
+          <div class="mt-4">
+            <div class="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+              <span class="font-semibold">빠른 이름 선택 (클릭 시 해당 회원의 활동을 바로 불러옵니다):</span>
+              <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-slate-600">
+                <input id="member-show-other-cats" type="checkbox" onchange="renderMemberSearchResult()" class="h-3.5 w-3.5 accent-blue-600" />
+                <span>대회·공모전 / 대외활동 / 자격증도 함께 보기</span>
+              </label>
+            </div>
+            <div id="member-quick-chips" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Member Search Results Container (Activities + Side-by-Side Session & Date Editor) -->
+      <div id="member-search-results" class="space-y-6"></div>
+
+      <!-- Overall Statistics & Readable Summary Table (Also visible below for easy reference) -->
+      <div class="pt-4 border-t border-slate-200 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 class="text-lg font-extrabold text-slate-900">
+              📊 동아리 전체 통계 및 회원별 스터디 · 세미나 · 프로젝트 참여 현황표
+            </h3>
+            <p class="text-xs text-slate-500">
+              일반 회원이 입력·수정한 모임 회차 및 날짜가 아래 통계와 표에 실시간으로 반영됩니다. 이름을 클릭하면 위에서 바로 회차를 수정할 수 있습니다.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <button onclick="setPublicTableFilter('all')" id="ptf-all" class="rounded-full bg-slate-900 px-3.5 py-1.5 font-bold text-white">전체 회원</button>
+            <button onclick="setPublicTableFilter('ssp_any')" id="ptf-ssp_any" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">참여 활동 있는 회원</button>
+            <button onclick="setPublicTableFilter('3plus')" id="ptf-3plus" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">★ 3건 이상 참여 회원</button>
+          </div>
+        </div>
+
+        <!-- Overall Statistics Cards Above Table -->
+        <div id="public-stats-banner"></div>
+
+        <!-- Readable Table: 학번, 성명, 소속, 학년, 스터디 참여, 세미나 참여, 프로젝트 참여, 총 참여 합계 -->
+        <div id="public-summary-table"></div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 2: 관리자 회원 모드 (비밀번호 gaon_form_0204 인증 후 조회·관리) -->
+    <!-- ===================================================================== -->
+    <section id="mode-admin" class="hidden space-y-6">
+
+      <!-- Admin Password Gate (Shown when not authenticated) -->
+      <div id="admin-login-gate" class="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-md sm:p-8 my-8">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl text-blue-600 mb-4">
+          🔐
+        </div>
+        <h2 class="text-xl font-extrabold text-slate-900">관리자 회원 인증</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          일반 회원이 입력한 세미나·스터디·프로젝트 참여 내역과 모임 회차·날짜를 조회하려면 관리자 비밀번호를 입력하세요.
+        </p>
+        <div class="mt-5 space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">관리자 비밀번호</label>
+            <input
+              id="admin-pw-input"
+              type="password"
+              onkeydown="if(event.key==='Enter') verifyAdminPassword()"
+              placeholder="비밀번호 입력"
+              class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-mono outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+            />
+            <p id="admin-pw-error" class="hidden mt-1.5 text-xs font-semibold text-red-600">
+              비밀번호가 일치하지 않습니다. 다시 확인해 주세요.
+            </p>
+          </div>
+          <button
+            onclick="verifyAdminPassword()"
+            class="w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white hover:bg-slate-800 transition">
+            관리자 페이지 접속하기
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin Dashboard Content (Shown after gaon_form_0204 authentication) -->
+      <div id="admin-dashboard-content" class="hidden space-y-6">
+        <!-- Admin Top Banner -->
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-gradient-to-r from-slate-900 to-blue-950 p-5 text-white shadow-sm">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="rounded-full bg-emerald-500/20 border border-emerald-400/40 px-2.5 py-0.5 text-xs font-bold text-emerald-300">
+                ✔ 관리자 모드 (gaon_form_0204 인증 완료)
+              </span>
+              <span id="admin-modified-count-badge" class="rounded-full bg-amber-400/20 border border-amber-300/40 px-2.5 py-0.5 text-xs font-bold text-amber-200"></span>
+            </div>
+            <h2 class="mt-1.5 text-xl font-extrabold">
+              동아리 세미나 · 스터디 · 프로젝트 참여 현황 및 회차별 모임 통합 조회
+            </h2>
+            <p class="mt-0.5 text-xs text-slate-300">
+              일반 회원이 입력·수정한 모임 회차 및 날짜 내역을 실시간으로 조회·검토하고, 표 위에서 전체 통계를 확인하거나 엑셀(CSV)로 내보낼 수 있습니다.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick="exportAdminSummaryCSV()"
+              class="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition">
+              📥 회원별 요약표 CSV 다운로드
+            </button>
+            <button
+              onclick="exportAdminDetailedSessionsCSV()"
+              class="rounded-xl bg-white/10 border border-white/20 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/20 transition">
+              📥 활동·회차별 날짜 상세 CSV 다운로드
+            </button>
+            <button
+              onclick="resetAllToInitial()"
+              class="rounded-xl bg-rose-500/20 border border-rose-400/30 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-500/30 transition">
+              초기 데이터 복원
+            </button>
+            <button
+              onclick="logoutAdmin()"
+              class="rounded-xl bg-white/10 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-white/20 transition">
+              잠금
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. 전체 통계값 (Overall Statistics Banner Above the Table) -->
+        <div id="admin-stats-banner"></div>
+
+        <!-- 2. 일반 회원 최근 회차 입력/수정 로그 (Shows what members updated) -->
+        <div id="admin-recent-updates-box" class="hidden rounded-2xl border border-amber-200 bg-amber-50/70 p-4"></div>
+
+        <!-- 3. 필터 및 검색 바 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+          <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+            <div class="lg:col-span-2 relative">
+              <input
+                id="admin-search"
+                type="text"
+                oninput="renderAdminDashboard()"
+                placeholder="학번, 성명, 소속, 스터디·세미나·프로젝트명 검색..."
+                class="w-full rounded-xl border border-slate-300 bg-slate-50/60 pl-9 pr-3 py-2 text-sm outline-none focus:border-blue-600 focus:bg-white"
+              />
+              <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+            </div>
+            <select id="admin-filter-dept" onchange="renderAdminDashboard()" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-600">
+              <option value="">소속(트랙/소모임) 전체</option>
+            </select>
+            <select id="admin-filter-grade" onchange="renderAdminDashboard()" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-600">
+              <option value="">학년 전체</option>
+              <option value="1">1학년</option>
+              <option value="2">2학년</option>
+              <option value="3">3학년</option>
+              <option value="4">4학년</option>
+            </select>
+            <select id="admin-sort-by" onchange="renderAdminDashboard()" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-600">
+              <option value="total_desc">총 참여 합계 많은 순</option>
+              <option value="meetings_desc">총 모임 회차 많은 순</option>
+              <option value="sid_asc">학번 오름차순</option>
+              <option value="name_asc">성명 가나다순</option>
+              <option value="grade_asc">학년 오름차순</option>
+            </select>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="font-bold text-slate-600 mr-1">조회 대상 필터:</span>
+              <button onclick="setAdminMemberFilter('all')" id="amf-all" class="rounded-full bg-blue-600 px-3.5 py-1.5 font-bold text-white shadow-sm">
+                전체 회원
+              </button>
+              <button onclick="setAdminMemberFilter('ssp_any')" id="amf-ssp_any" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+                스터디·세미나·프로젝트 1건 이상
+              </button>
+              <button onclick="setAdminMemberFilter('3plus')" id="amf-3plus" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+                ★ 3건 이상 참여 회원
+              </button>
+              <button onclick="setAdminMemberFilter('modified')" id="amf-modified" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+                ✏️ 최근 회차 입력·수정된 회원
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="inline-flex items-center gap-1.5 cursor-pointer font-medium text-slate-600">
+                <input id="admin-include-other-cats" type="checkbox" onchange="renderAdminDashboard()" class="h-3.5 w-3.5 accent-blue-600" />
+                <span>대회·공모전/대외활동/자격증도 표 안에 함께 보기</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 가독성 좋은 메인 표 (열: 학번, 성명, 소속, 학년, 스터디 참여, 세미나 참여, 프로젝트 참여, 총 참여 합계) -->
+        <div id="admin-main-table-container"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: 새 활동 (스터디 / 세미나 / 프로젝트) 추가 모달 -->
+  <!-- ===================================================================== -->
+  <div id="new-activity-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs" onclick="if(event.target===this) closeNewActivityModal()">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <div>
+          <span class="rounded bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">신규 등록</span>
+          <h3 class="mt-1 text-lg font-extrabold text-slate-900">새로운 스터디 · 세미나 · 프로젝트 및 모임 회차 등록</h3>
+        </div>
+        <button onclick="closeNewActivityModal()" class="text-2xl text-slate-400 hover:text-slate-700">×</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="col-span-2">
+          <label class="mb-1 block text-xs font-bold text-slate-700">회원 선택 *</label>
+          <select id="new-act-member" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-medium outline-none focus:border-blue-600"></select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-bold text-slate-700">활동 구분 *</label>
+          <select id="new-act-type" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-medium outline-none focus:border-blue-600">
+            <option value="스터디">📗 스터디</option>
+            <option value="세미나">📘 세미나</option>
+            <option value="프로젝트">📕 프로젝트</option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-bold text-slate-700">초기 모임 횟수 (회차) *</label>
+          <input id="new-act-count" type="number" min="1" max="30" value="3" onchange="syncNewActModalSessions()" class="w-full rounded-xl border border-slate-300 px-3 py-2.5 font-bold tabular-nums outline-none focus:border-blue-600" />
+        </div>
+        <div class="col-span-2">
+          <label class="mb-1 block text-xs font-bold text-slate-700">활동명 (스터디 / 세미나 / 프로젝트 제목) *</label>
+          <input id="new-act-title" type="text" placeholder="예: 알고리즘 코딩테스트 스터디 / 가온 웹 서비스 프로젝트" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 outline-none focus:border-blue-600" />
+        </div>
+        <div class="col-span-2">
+          <label class="mb-1 block text-xs font-bold text-slate-700">주최 · 팀명 · 역할 (선택)</label>
+          <input id="new-act-role" type="text" placeholder="예: 백엔드 개발 및 DB 설계 / 스터디원" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 outline-none focus:border-blue-600" />
+        </div>
+        <div class="col-span-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-bold text-slate-700">회차별 모임 날짜 입력 (1회차, 2회차...)</label>
+            <button type="button" onclick="addNewActModalSessionRow()" class="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white hover:bg-slate-700">+ 회차 추가</button>
+          </div>
+          <div id="new-act-sessions-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 max-h-52 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-slate-200 pt-3">
+        <button onclick="closeNewActivityModal()" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">취소</button>
+        <button onclick="saveNewActivityModal()" class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">활동 및 회차 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Provided Database -->
+  <script src="./data.js"></script>
+  <script>
+    const STORAGE_KEY = 'gaon_club_homepage_db_v3';
+    const ADMIN_AUTH_KEY = 'gaon_club_admin_authed_v3';
+    const ADMIN_PASSWORD = 'gaon_form_0204';
+
+    let state = null;
+    let currentMode = 'member'; // 'member' | 'admin'
+    let isAdminAuthed = false;
+    let selectedMemberQuery = '';
+    let publicTableFilter = 'all'; // 'all' | 'ssp_any' | '3plus'
+    let adminMemberFilter = 'all'; // 'all' | 'ssp_any' | '3plus' | 'modified'
+
+    const CATEGORY_STYLE = {
+      '스터디': {
+        badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        cardBorder: 'border-emerald-200/80',
+        headerBg: 'bg-emerald-50/70',
+        pillBg: 'bg-emerald-600 text-white',
+        lightText: 'text-emerald-700',
+        icon: '📗'
+      },
+      '세미나': {
+        badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        cardBorder: 'border-indigo-200/80',
+        headerBg: 'bg-indigo-50/70',
+        pillBg: 'bg-indigo-600 text-white',
+        lightText: 'text-indigo-700',
+        icon: '📘'
+      },
+      '프로젝트': {
+        badge: 'bg-rose-100 text-rose-800 border-rose-200',
+        cardBorder: 'border-rose-200/80',
+        headerBg: 'bg-rose-50/70',
+        pillBg: 'bg-rose-600 text-white',
+        lightText: 'text-rose-700',
+        icon: '📕'
+      },
+      '대회·공모전': {
+        badge: 'bg-amber-100 text-amber-800 border-amber-200',
+        cardBorder: 'border-amber-200/80',
+        headerBg: 'bg-amber-50/60',
+        pillBg: 'bg-amber-600 text-white',
+        lightText: 'text-amber-700',
+        icon: '🏆'
+      },
+      '대외활동': {
+        badge: 'bg-teal-100 text-teal-800 border-teal-200',
+        cardBorder: 'border-teal-200/80',
+        headerBg: 'bg-teal-50/60',
+        pillBg: 'bg-teal-600 text-white',
+        lightText: 'text-teal-700',
+        icon: '🌐'
+      },
+      '학부연구생': {
+        badge: 'bg-purple-100 text-purple-800 border-purple-200',
+        cardBorder: 'border-purple-200/80',
+        headerBg: 'bg-purple-50/60',
+        pillBg: 'bg-purple-600 text-white',
+        lightText: 'text-purple-700',
+        icon: '🔬'
+      },
+      '자격증': {
+        badge: 'bg-slate-200 text-slate-800 border-slate-300',
+        cardBorder: 'border-slate-200',
+        headerBg: 'bg-slate-50',
+        pillBg: 'bg-slate-700 text-white',
+        lightText: 'text-slate-700',
+        icon: '📜'
+      }
+    };
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      t.classList.remove('hidden');
+      t.classList.add('flex');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        t.classList.add('hidden');
+        t.classList.remove('flex');
+      }, 2400);
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          state = JSON.parse(saved);
+          if (!state.updateLogs) state.updateLogs = [];
+          recalcAll();
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      state = JSON.parse(JSON.stringify(window.GAON_INITIAL_DATA));
+      state.updateLogs = [];
+      recalcAll();
+    }
+
+    function saveState(logMessage) {
+      if (logMessage) {
+        state.updateLogs = state.updateLogs || [];
+        state.updateLogs.unshift({
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          message: logMessage
+        });
+        if (state.updateLogs.length > 30) state.updateLogs.length = 30;
+      }
+      recalcAll();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function ensureActivitySessions(act) {
+      if (!Array.isArray(act.sessions) || act.sessions.length === 0) {
+        const cnt = Math.max(1, Number(act.meeting_count) || 1);
+        const base = act.start_date || '2026-09-01';
+        act.sessions = [];
+        for (let i = 0; i < cnt; i++) {
+          const d = new Date(base);
+          if (!isNaN(d)) d.setDate(d.getDate() + i * 7);
+          const iso = !isNaN(d) ? d.toISOString().slice(0, 10) : base;
+          act.sessions.push({ session_no: i + 1, label: `${i + 1}회차`, date: iso });
+        }
+      }
+      act.sessions.forEach((s, idx) => {
+        s.session_no = idx + 1;
+        s.label = `${idx + 1}회차`;
+        if (!s.date) s.date = act.start_date || '2026-09-01';
+      });
+      act.meeting_count = act.sessions.length;
+      act.session_schedule_text = act.sessions.map(s => `${s.label}(${s.date})`).join(', ');
+    }
+
+    function recalcAll() {
+      const bySid = new Map();
+      state.members.forEach(m => bySid.set(m.student_id, []));
+      state.activities.forEach(a => {
+        // Fix any "트강" typo if loaded from older cache
+        if (a.title && a.title.includes('트강') && a.activity_type === '대회·공모전') {
+          a.activity_type = '세미나';
+        }
+        ensureActivitySessions(a);
+        if (!bySid.has(a.student_id)) bySid.set(a.student_id, []);
+        bySid.get(a.student_id).push(a);
+      });
+
+      state.members.forEach(m => {
+        const acts = bySid.get(m.student_id) || [];
+        const studies = acts.filter(a => a.activity_type === '스터디');
+        const seminars = acts.filter(a => a.activity_type === '세미나');
+        const projects = acts.filter(a => a.activity_type === '프로젝트');
+        const ssp = acts.filter(a => ['스터디', '세미나', '프로젝트'].includes(a.activity_type));
+
+        m.total_activities = acts.length;
+        m.study_count = studies.length;
+        m.study_meetings = studies.reduce((s, a) => s + a.meeting_count, 0);
+        m.seminar_count = seminars.length;
+        m.seminar_meetings = seminars.reduce((s, a) => s + a.meeting_count, 0);
+        m.project_count = projects.length;
+        m.project_meetings = projects.reduce((s, a) => s + a.meeting_count, 0);
+        m.ssp_total_count = ssp.length;
+        m.ssp_meetings = m.study_meetings + m.seminar_meetings + m.project_meetings;
+        m.total_meetings = acts.reduce((s, a) => s + a.meeting_count, 0);
+        m.is_3plus_ssp = ssp.length >= 3;
+        m.has_modified = acts.some(a => a.user_modified);
+        m.ssp_summary_text = ssp.map(a =>
+          `[${a.activity_type}] ${a.title} (모임 ${a.meeting_count}회: ${a.session_schedule_text})`
+        ).join(' / ') || '해당 활동 없음';
+      });
+    }
+
+    // =========================================================================
+    // MODE SWITCHING & ADMIN AUTH
+    // =========================================================================
+    function switchMode(mode) {
+      currentMode = mode;
+      const btnMember = document.getElementById('nav-btn-member');
+      const btnAdmin = document.getElementById('nav-btn-admin');
+      const secMember = document.getElementById('mode-member');
+      const secAdmin = document.getElementById('mode-admin');
+
+      if (mode === 'member') {
+        btnMember.className = 'rounded-lg bg-white px-3.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition sm:text-sm';
+        btnAdmin.className = 'rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition sm:text-sm';
+        secMember.classList.remove('hidden');
+        secAdmin.classList.add('hidden');
+        renderMemberMode();
+      } else {
+        btnAdmin.className = 'rounded-lg bg-white px-3.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm transition sm:text-sm';
+        btnMember.className = 'rounded-lg px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition sm:text-sm';
+        secMember.classList.add('hidden');
+        secAdmin.classList.remove('hidden');
+        renderAdminMode();
+      }
+    }
+
+    function verifyAdminPassword() {
+      const inp = document.getElementById('admin-pw-input');
+      const err = document.getElementById('admin-pw-error');
+      if (inp.value.trim() === ADMIN_PASSWORD) {
+        isAdminAuthed = true;
+        sessionStorage.setItem(ADMIN_AUTH_KEY, '1');
+        err.classList.add('hidden');
+        inp.value = '';
+        document.getElementById('admin-unlocked-badge').classList.remove('hidden');
+        renderAdminMode();
+        showToast('관리자 인증이 완료되었습니다.');
+      } else {
+        err.classList.remove('hidden');
+      }
+    }
+
+    function logoutAdmin() {
+      isAdminAuthed = false;
+      sessionStorage.removeItem(ADMIN_AUTH_KEY);
+      document.getElementById('admin-unlocked-badge').classList.add('hidden');
+      renderAdminMode();
+    }
+
+    function renderAdminMode() {
+      const gate = document.getElementById('admin-login-gate');
+      const dash = document.getElementById('admin-dashboard-content');
+      if (isAdminAuthed) {
+        gate.classList.add('hidden');
+        dash.classList.remove('hidden');
+        renderAdminDashboard();
+      } else {
+        gate.classList.remove('hidden');
+        dash.classList.add('hidden');
+        setTimeout(() => document.getElementById('admin-pw-input')?.focus(), 50);
+      }
+    }
+
+    // =========================================================================
+    // MEMBER MODE: SEARCH & SIDE-BY-SIDE SESSION / DATE INPUT
+    // =========================================================================
+    function renderQuickMemberChips() {
+      const box = document.getElementById('member-quick-chips');
+      // Sort members with SSP activities first, then by name
+      const sorted = [...state.members].sort((a, b) => {
+        if ((b.ssp_total_count > 0) !== (a.ssp_total_count > 0)) {
+          return b.ssp_total_count > 0 ? 1 : -1;
+        }
+        return a.name.localeCompare(b.name, 'ko');
+      });
+
+      box.innerHTML = sorted.map(m => {
+        const isSelected = selectedMemberQuery && (m.name === selectedMemberQuery || m.student_id === selectedMemberQuery);
+        const hasSSP = m.ssp_total_count > 0;
+        return `
+          <button
+            type="button"
+            onclick="selectMemberByName('${escapeHtml(m.name)}')"
+            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition ${
+              isSelected
+                ? 'border-blue-600 bg-blue-600 font-bold text-white shadow-xs'
+                : hasSSP
+                  ? 'border-slate-300 bg-white font-semibold text-slate-800 hover:border-blue-500 hover:text-blue-600'
+                  : 'border-slate-200 bg-slate-100/70 text-slate-500 hover:bg-white'
+            }">
+            <span>${escapeHtml(m.name)}</span>
+            <span class="text-[10px] ${isSelected ? 'text-blue-100' : hasSSP ? 'text-blue-600 font-bold' : 'text-slate-400'}">
+              ${hasSSP ? `${m.ssp_total_count}건` : '0'}
+            </span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectMemberByName(name) {
+      selectedMemberQuery = name;
+      const inp = document.getElementById('member-search-input');
+      if (inp) inp.value = name;
+      renderQuickMemberChips();
+      renderMemberSearchResult();
+      document.getElementById('member-search-results')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function onMemberSearchInput() {
+      const val = document.getElementById('member-search-input').value.trim();
+      selectedMemberQuery = val;
+      renderQuickMemberChips();
+      renderMemberSearchResult();
+    }
+
+    function triggerMemberSearch() {
+      const val = document.getElementById('member-search-input').value.trim();
+      selectedMemberQuery = val;
+      renderQuickMemberChips();
+      renderMemberSearchResult();
+    }
+
+    function clearMemberSearch() {
+      selectedMemberQuery = '';
+      document.getElementById('member-search-input').value = '';
+      renderQuickMemberChips();
+      renderMemberSearchResult();
+    }
+
+    function renderMemberSearchResult() {
+      const container = document.getElementById('member-search-results');
+      const q = (selectedMemberQuery || '').trim().toLowerCase();
+      const showOtherCats = document.getElementById('member-show-other-cats')?.checked;
+
+      if (!q) {
+        container.innerHTML = `
+          <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-2xl">🔎</div>
+            <h3 class="mt-3 text-base font-bold text-slate-800">위 검색창에 본인의 이름을 입력하거나 이름 버튼을 클릭해 주세요</h3>
+            <p class="mt-1 text-xs text-slate-500">
+              검색 즉시 본인이 참여한 <b>스터디 · 세미나 · 프로젝트</b> 목록이 나타나며, 각 활동 옆에서 모임 회차 추가 및 날짜 입력을 할 수 있습니다.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      const matchedMembers = state.members.filter(m =>
+        m.name.toLowerCase().includes(q) || m.student_id.toLowerCase().includes(q)
+      );
+
+      if (matchedMembers.length === 0) {
+        container.innerHTML = `
+          <div class="rounded-2xl border border-rose-200 bg-rose-50/50 p-6 text-center">
+            <p class="text-base font-bold text-rose-900">'${escapeHtml(selectedMemberQuery)}' 이름(또는 학번)에 해당하는 회원을 찾을 수 없습니다.</p>
+            <p class="mt-1 text-xs text-rose-700">오타가 없는지 확인하시거나 상단의 빠른 이름 선택 버튼을 클릭해 주세요.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = matchedMembers.map(m => {
+        const allActs = state.activities.filter(a => a.student_id === m.student_id);
+        const sspActs = allActs.filter(a => ['스터디', '세미나', '프로젝트'].includes(a.activity_type));
+        const otherActs = allActs.filter(a => !['스터디', '세미나', '프로젝트'].includes(a.activity_type));
+        const displayActs = showOtherCats ? allActs : sspActs;
+
+        const affil = formatAffiliation(m);
+
+        return `
+          <div class="overflow-hidden rounded-2xl border-2 border-blue-600/20 bg-white shadow-md">
+            <!-- Member Profile Header -->
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-900 px-5 py-4 text-white">
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-lg font-black text-white">
+                  ${escapeHtml(m.name.slice(0, 1))}
+                </div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xl font-extrabold">${escapeHtml(m.name)}</span>
+                    <span class="rounded-md bg-white/15 px-2 py-0.5 font-mono text-xs font-semibold text-blue-200">${escapeHtml(m.student_id)}</span>
+                    <span class="rounded-md bg-blue-500/30 px-2 py-0.5 text-xs font-bold text-white">${escapeHtml(m.grade)}학년</span>
+                  </div>
+                  <p class="mt-0.5 text-xs text-slate-300">
+                    소속: <b>${escapeHtml(affil.primary)}</b> ${affil.sub ? `· 소모임: ${escapeHtml(affil.sub)}` : ''}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Member Personal Summary Pills -->
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <div class="rounded-xl bg-emerald-500/20 border border-emerald-400/30 px-3 py-1.5 text-center">
+                  <div class="text-[10px] text-emerald-200">스터디 참여</div>
+                  <div class="font-extrabold text-emerald-300 tabular-nums">${m.study_count}건 (${m.study_meetings}회차)</div>
+                </div>
+                <div class="rounded-xl bg-indigo-500/20 border border-indigo-400/30 px-3 py-1.5 text-center">
+                  <div class="text-[10px] text-indigo-200">세미나 참여</div>
+                  <div class="font-extrabold text-indigo-300 tabular-nums">${m.seminar_count}건 (${m.seminar_meetings}회차)</div>
+                </div>
+                <div class="rounded-xl bg-rose-500/20 border border-rose-400/30 px-3 py-1.5 text-center">
+                  <div class="text-[10px] text-rose-200">프로젝트 참여</div>
+                  <div class="font-extrabold text-rose-300 tabular-nums">${m.project_count}건 (${m.project_meetings}회차)</div>
+                </div>
+                <div class="rounded-xl bg-blue-600 px-3.5 py-1.5 text-center shadow-xs">
+                  <div class="text-[10px] text-blue-100">총 참여 합계</div>
+                  <div class="font-black text-white tabular-nums">총 ${m.ssp_total_count}건 · ${m.ssp_meetings}회차</div>
+                </div>
+                <button
+                  type="button"
+                  onclick="openNewActivityModal('${escapeHtml(m.student_id)}')"
+                  class="rounded-xl bg-white px-3 py-2 text-xs font-extrabold text-slate-900 hover:bg-blue-50 transition">
+                  + 내 활동 추가
+                </button>
+              </div>
+            </div>
+
+            <!-- Member Activities List with Side-by-Side Session & Date Editor -->
+            <div class="p-5 space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div class="text-sm font-bold text-slate-800">
+                  📋 ${escapeHtml(m.name)} 회원의 수행 활동 및 모임 회차·날짜 입력란
+                  <span class="ml-1 text-xs font-normal text-slate-500">(각 활동 우측에서 회차 추가 및 모임 날짜를 바로 입력·수정할 수 있습니다)</span>
+                </div>
+                ${otherActs.length > 0 && !showOtherCats ? `
+                  <button
+                    type="button"
+                    onclick="document.getElementById('member-show-other-cats').checked = true; renderMemberSearchResult();"
+                    class="text-xs font-semibold text-blue-600 hover:underline">
+                    + 그 외 대회·공모전/대외활동/자격증 ${otherActs.length}건 더보기
+                  </button>
+                ` : ''}
+              </div>
+
+              ${displayActs.length === 0 ? `
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-2">
+                  <p class="text-sm font-bold text-slate-700">등록된 스터디 · 세미나 · 프로젝트 활동이 없습니다.</p>
+                  ${otherActs.length > 0 ? `
+                    <p class="text-xs text-slate-500">
+                      (참고: 대회·공모전/대외활동/자격증 활동이 <b>${otherActs.length}건</b> 있습니다.
+                      <button type="button" onclick="document.getElementById('member-show-other-cats').checked=true; renderMemberSearchResult();" class="font-bold text-blue-600 underline">여기를 눌러 확인</button>하거나 새 스터디/세미나/프로젝트를 추가해 보세요.)
+                    </p>
+                  ` : ''}
+                  <div>
+                    <button
+                      type="button"
+                      onclick="openNewActivityModal('${escapeHtml(m.student_id)}')"
+                      class="mt-1 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                      + 새 스터디·세미나·프로젝트 직접 등록하기
+                    </button>
+                  </div>
+                </div>
+              ` : `
+                <div class="space-y-4">
+                  ${displayActs.map((act, idx) => renderMemberActivityCardWithSideEditor(act, idx + 1)).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Renders a single activity card where LEFT is Activity Info and RIGHT ("옆에") is the Session Count & Date Editor
+    function renderMemberActivityCardWithSideEditor(act, indexNo) {
+      const st = CATEGORY_STYLE[act.activity_type] || CATEGORY_STYLE['자격증'];
+      ensureActivitySessions(act);
+
+      const sessionRowsHtml = act.sessions.map((s, sIdx) => `
+        <div class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-2xs">
+          <span class="min-w-[46px] rounded bg-slate-100 px-1.5 py-0.5 text-center text-xs font-extrabold text-slate-800 tabular-nums">
+            ${sIdx + 1}회차
+          </span>
+          <input
+            type="date"
+            value="${escapeHtml(s.date)}"
+            onchange="updateSessionDate('${act.id}', ${sIdx}, this.value)"
+            class="flex-1 rounded border border-slate-200 bg-slate-50/70 px-2 py-1 text-xs font-semibold text-slate-800 tabular-nums outline-none focus:border-blue-600 focus:bg-white"
+          />
+          ${act.sessions.length > 1 ? `
+            <button
+              type="button"
+              onclick="removeSpecificSession('${act.id}', ${sIdx})"
+              title="${sIdx + 1}회차 삭제"
+              class="rounded px-1.5 py-0.5 text-xs font-bold text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+              ×
+            </button>
+          ` : ''}
+        </div>
+      `).join('');
+
+      return `
+        <div class="rounded-2xl border ${st.cardBorder} bg-white shadow-xs transition hover:shadow-md overflow-hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-12">
+            <!-- LEFT: 수행한 세미나/스터디/프로젝트 상세 정보 (5 cols) -->
+            <div class="lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-200 ${st.headerBg}">
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-extrabold ${st.badge}">
+                    ${st.icon} ${escapeHtml(act.activity_type)}
+                  </span>
+                  <span class="text-xs font-bold text-slate-400">#${indexNo}</span>
+                  ${act.user_modified ? `
+                    <span class="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">최근 입력·수정됨</span>
+                  ` : ''}
+                  <!-- Category Re-selector if member wants to reclassify -->
+                  <select
+                    onchange="changeActivityCategory('${act.id}', this.value)"
+                    title="활동 구분 변경"
+                    class="ml-auto rounded-lg border border-slate-200 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-slate-600 outline-none focus:border-blue-600">
+                    ${['스터디', '세미나', '프로젝트', '대회·공모전', '대외활동', '학부연구생', '자격증'].map(c =>
+                      `<option value="${c}" ${act.activity_type === c ? 'selected' : ''}>구분: ${c}</option>`
+                    ).join('')}
+                  </select>
+                </div>
+
+                <h4 class="text-base font-extrabold text-slate-900 sm:text-lg leading-snug">
+                  ${escapeHtml(act.title)}
+                </h4>
+
+                <div class="space-y-1 text-xs text-slate-600">
+                  ${act.organizer ? `<div><b class="text-slate-700">주최·설명:</b> ${escapeHtml(act.organizer)}</div>` : ''}
+                  ${act.role ? `<div><b class="text-slate-700">담당 역할:</b> ${escapeHtml(act.role)}</div>` : ''}
+                  ${(act.start_date || act.end_date) ? `
+                    <div><b class="text-slate-700">활동 기간:</b> <span class="tabular-nums">${escapeHtml(act.start_date || '-')} ~ ${escapeHtml(act.end_date || '진행중')}</span></div>
+                  ` : ''}
+                  ${act.team_name ? `<div><b class="text-slate-700">팀명:</b> ${escapeHtml(act.team_name)} ${act.team_size ? `(${act.team_size}명)` : ''}</div>` : ''}
+                  ${act.tech_stack ? `<div><b class="text-slate-700">기술스택:</b> <span class="font-mono text-[11px] text-blue-700">${escapeHtml(act.tech_stack)}</span></div>` : ''}
+                  ${act.award_level ? `<div><b class="text-slate-700">수상내역:</b> <span class="font-bold text-amber-700">🏅 ${escapeHtml(act.award_level)}</span></div>` : ''}
+                </div>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-slate-200/70 flex items-center justify-between text-xs">
+                <span class="font-semibold text-slate-600">현재 기록된 총 모임 횟수</span>
+                <span class="rounded-full ${st.pillBg} px-3 py-1 text-xs font-black tabular-nums">
+                  총 ${act.meeting_count}회차 모임
+                </span>
+              </div>
+            </div>
+
+            <!-- RIGHT ("옆에"): 몇 회차 모임을 가졌는지 회차 추가 및 날짜 입력 패널 (7 cols) -->
+            <div class="lg:col-span-7 p-4 sm:p-5 bg-white space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-extrabold text-blue-700 border border-blue-200">
+                    📅 모임 회차 & 날짜 체크
+                  </span>
+                  <span class="text-xs text-slate-500">
+                    총 <b class="text-slate-900 tabular-nums">${act.meeting_count}회차</b> 모임 진행
+                  </span>
+                </div>
+
+                <!-- Quick Add / Remove Session Buttons -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 p-0.5">
+                    <button
+                      type="button"
+                      onclick="adjustSessionCount('${act.id}', -1)"
+                      class="h-7 w-7 rounded-md bg-white text-sm font-black text-slate-700 shadow-2xs hover:bg-slate-100">
+                      -
+                    </button>
+                    <span class="px-2.5 text-xs font-extrabold text-slate-900 tabular-nums">
+                      ${act.meeting_count}회차
+                    </span>
+                    <button
+                      type="button"
+                      onclick="adjustSessionCount('${act.id}', 1)"
+                      class="h-7 w-7 rounded-md bg-white text-sm font-black text-blue-600 shadow-2xs hover:bg-blue-50">
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onclick="addSessionWithDate('${act.id}')"
+                    class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-blue-700 transition">
+                    + 회차 추가 (${act.meeting_count + 1}회차)
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick New Session Date Input Bar -->
+              <div class="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200/80 text-xs">
+                <span class="font-bold text-slate-700">⚡ 특정 날짜로 바로 회차 추가:</span>
+                <input
+                  type="date"
+                  id="quick-date-${act.id}"
+                  value="${getNextSuggestedDate(act)}"
+                  class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold tabular-nums outline-none focus:border-blue-600"
+                />
+                <button
+                  type="button"
+                  onclick="addSessionFromQuickInput('${act.id}')"
+                  class="rounded-lg bg-slate-900 px-3 py-1 font-bold text-white hover:bg-slate-800 transition">
+                  해당 날짜로 ${act.meeting_count + 1}회차 추가
+                </button>
+                <span class="ml-auto text-[11px] text-slate-400">날짜 변경 시 자동 저장됩니다</span>
+              </div>
+
+              <!-- Grid of Session Date Inputs (1회차, 2회차, 3회차...) -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
+                ${sessionRowsHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function getNextSuggestedDate(act) {
+      ensureActivitySessions(act);
+      const last = act.sessions[act.sessions.length - 1];
+      const base = last ? last.date : (act.start_date || '2026-09-01');
+      const d = new Date(base);
+      if (!isNaN(d)) d.setDate(d.getDate() + 7);
+      return !isNaN(d) ? d.toISOString().slice(0, 10) : '2026-11-10';
+    }
+
+    function updateSessionDate(actId, sessionIdx, newDate) {
+      const act = state.activities.find(a => a.id === actId);
+      if (!act || !act.sessions[sessionIdx]) return;
+      act.sessions[sessionIdx].date = newDate;
+      act.user_modified = true;
+      act.last_modified_at = new Date().toISOString();
+      saveState(`${act.name}(${act.student_id}) 회원이 [${act.activity_type}] '${act.title}' ${sessionIdx + 1}회차 날짜를 ${newDate}로 입력·수정했습니다.`);
+      renderAfterDataChange(actId);
+      showToast(`${act.title} — ${sessionIdx + 1}회차 날짜(${newDate})가 저장되었습니다.`);
+    }
+
+    function adjustSessionCount(actId, delta) {
+      const act = state.activities.find(a => a.id === actId);
+      if (!act) return;
+      ensureActivitySessions(act);
+      if (delta > 0) {
+        const nextDate = getNextSuggestedDate(act);
+        act.sessions.push({
+          session_no: act.sessions.length + 1,
+          label: `${act.sessions.length + 1}회차`,
+          date: nextDate
+        });
+        act.user_modified = true;
+        saveState(`${act.name}(${act.student_id}) 회원이 [${act.activity_type}] '${act.title}'에 ${act.sessions.length}회차(${nextDate})를 추가했습니다.`);
+        showToast(`${act.title} — ${act.sessions.length}회차가 추가되었습니다.`);
+      } else if (delta < 0 && act.sessions.length > 1) {
+        const removed = act.sessions.pop();
+        act.user_modified = true;
+        saveState(`${act.name}(${act.student_id}) 회원이 [${act.activity_type}] '${act.title}'에서 ${removed.label}를 삭제했습니다.`);
+        showToast(`${act.title} — 마지막 회차가 삭제되었습니다.`);
+      }
+      renderAfterDataChange(actId);
+    }
+
+    function addSessionWithDate(actId) {
+      adjustSessionCount(actId, 1);
+    }
+
+    function addSessionFromQuickInput(actId) {
+      const act = state.activities.find(a => a.id === actId);
+      if (!act) return;
+      const inp = document.getElementById('quick-date-' + actId);
+      const chosenDate = (inp && inp.value) ? inp.value : getNextSuggestedDate(act);
+      ensureActivitySessions(act);
+      act.sessions.push({
+        session_no: act.sessions.length + 1,
+        label: `${act.sessions.length + 1}회차`,
+        date: chosenDate
+      });
+      act.user_modified = true;
+      saveState(`${act.name}(${act.student_id}) 회원이 [${act.activity_type}] '${act.title}'에 ${act.sessions.length}회차(${chosenDate})를 추가했습니다.`);
+      renderAfterDataChange(actId);
+      showToast(`${act.title} — ${act.sessions.length}회차(${chosenDate})가 추가되었습니다.`);
+    }
+
+    function removeSpecificSession(actId, sessionIdx) {
+      const act = state.activities.find(a => a.id === actId);
+      if (!act || act.sessions.length <= 1) return;
+      act.sessions.splice(sessionIdx, 1);
+      act.user_modified = true;
+      saveState(`${act.name}(${act.student_id}) 회원이 [${act.activity_type}] '${act.title}' 회차를 수정(총 ${act.sessions.length}회차)했습니다.`);
+      renderAfterDataChange(actId);
+      showToast(`${act.title} — 회차가 삭제되었습니다.`);
+    }
+
+    function changeActivityCategory(actId, newCat) {
+      const act = state.activities.find(a => a.id === actId);
+      if (!act) return;
+      act.activity_type = newCat;
+      act.user_modified = true;
+      saveState(`${act.name}(${act.student_id}) 회원의 '${act.title}' 활동 구분이 [${newCat}](으)로 변경되었습니다.`);
+      renderAfterDataChange(actId);
+      showToast(`'${act.title}' 구분이 [${newCat}](으)로 변경되었습니다.`);
+    }
+
+    function renderAfterDataChange() {
+      if (currentMode === 'member') {
+        renderMemberMode();
+      } else {
+        renderAdminDashboard();
+      }
+    }
+
+    // =========================================================================
+    // SHARED STATISTICS & READABLE SUMMARY TABLE BUILDER
+    // Columns required by user:
+    // 학번 | 성명 | 소속 | 학년 | 스터디 참여 | 세미나 참여 | 프로젝트 참여 | 총 참여 합계
+    // Plus clear per-member breakdown of which studies, seminars, projects & session dates they had
+    // =========================================================================
+    function formatAffiliation(m) {
+      const dept = (m.department || '').trim() || 'ICT융합학부';
+      const club = (m.club_group && m.club_group !== '해당없음') ? m.club_group : '';
+      return { primary: dept, sub: club };
+    }
+
+    function buildOverallStatsBannerHtml(membersSubset, isFiltered) {
+      const allMembers = state.members;
+      const targetMembers = membersSubset || allMembers;
+
+      const totalMembersCount = allMembers.length;
+      const activeSSPMembersCount = allMembers.filter(m => m.ssp_total_count > 0).length;
+      const threePlusMembersCount = allMembers.filter(m => m.is_3plus_ssp).length;
+
+      const sumStudyCnt = allMembers.reduce((s, m) => s + m.study_count, 0);
+      const sumStudyMeet = allMembers.reduce((s, m) => s + m.study_meetings, 0);
+
+      const sumSeminarCnt = allMembers.reduce((s, m) => s + m.seminar_count, 0);
+      const sumSeminarMeet = allMembers.reduce((s, m) => s + m.seminar_meetings, 0);
+
+      const sumProjCnt = allMembers.reduce((s, m) => s + m.project_count, 0);
+      const sumProjMeet = allMembers.reduce((s, m) => s + m.project_meetings, 0);
+
+      const sumTotalSSPCnt = sumStudyCnt + sumSeminarCnt + sumProjCnt;
+      const sumTotalSSPMeet = sumStudyMeet + sumSeminarMeet + sumProjMeet;
+
+      const avgMeetPerActive = activeSSPMembersCount > 0
+        ? (sumTotalSSPMeet / activeSSPMembersCount).toFixed(1)
+        : '0.0';
+
+      return `
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3.5">
+            <div class="flex items-center gap-2">
+              <span class="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-extrabold text-white">전체 통계값 요약</span>
+              <span class="text-xs text-slate-500">
+                전체 동아리 회원 <b>${totalMembersCount}명</b> 기준 (현재 표 조회 인원: <b>${targetMembers.length}명</b>)
+              </span>
+            </div>
+            <div class="text-xs font-semibold text-blue-700">
+              참여 회원 1인당 평균 모임 횟수: <b>${avgMeetPerActive}회차</b>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <!-- Stat 1: 전체 회원 & 참여 회원 -->
+            <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+              <div class="text-xs font-semibold text-slate-500">전체 회원 / 참여 회원</div>
+              <div class="mt-1 text-2xl font-black text-slate-900 tabular-nums">
+                ${totalMembersCount}<span class="text-sm font-bold text-slate-500">명</span>
+                <span class="text-sm font-bold text-blue-600">(${activeSSPMembersCount}명 참여)</span>
+              </div>
+              <div class="mt-1 text-[11px] text-slate-500">
+                3건 이상 우수 참여: <b class="text-slate-800">${threePlusMembersCount}명</b>
+              </div>
+            </div>
+
+            <!-- Stat 2: 스터디 참여 -->
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5">
+              <div class="text-xs font-bold text-emerald-800">📗 전체 스터디 참여</div>
+              <div class="mt-1 text-2xl font-black text-emerald-700 tabular-nums">
+                ${sumStudyCnt}<span class="text-sm font-bold">건</span>
+              </div>
+              <div class="mt-1 text-xs font-bold text-emerald-900 tabular-nums">
+                누적 모임: ${sumStudyMeet}회차
+              </div>
+            </div>
+
+            <!-- Stat 3: 세미나 참여 -->
+            <div class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5">
+              <div class="text-xs font-bold text-indigo-800">📘 전체 세미나 참여</div>
+              <div class="mt-1 text-2xl font-black text-indigo-700 tabular-nums">
+                ${sumSeminarCnt}<span class="text-sm font-bold">건</span>
+              </div>
+              <div class="mt-1 text-xs font-bold text-indigo-900 tabular-nums">
+                누적 모임: ${sumSeminarMeet}회차
+              </div>
+            </div>
+
+            <!-- Stat 4: 프로젝트 참여 -->
+            <div class="rounded-xl border border-rose-200 bg-rose-50/50 p-3.5">
+              <div class="text-xs font-bold text-rose-800">📕 전체 프로젝트 참여</div>
+              <div class="mt-1 text-2xl font-black text-rose-700 tabular-nums">
+                ${sumProjCnt}<span class="text-sm font-bold">건</span>
+              </div>
+              <div class="mt-1 text-xs font-bold text-rose-900 tabular-nums">
+                누적 모임: ${sumProjMeet}회차
+              </div>
+            </div>
+
+            <!-- Stat 5: 총 참여 합계 (건수) -->
+            <div class="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5">
+              <div class="text-xs font-bold text-blue-800">📊 총 참여 활동 합계</div>
+              <div class="mt-1 text-2xl font-black text-blue-700 tabular-nums">
+                ${sumTotalSSPCnt}<span class="text-sm font-bold">건</span>
+              </div>
+              <div class="mt-1 text-[11px] text-blue-800">
+                스터디 + 세미나 + 프로젝트
+              </div>
+            </div>
+
+            <!-- Stat 6: 총 모임 회차 합계 -->
+            <div class="rounded-xl border-2 border-slate-900 bg-slate-900 p-3.5 text-white">
+              <div class="text-xs font-bold text-blue-200">🔥 총 모임 회차 합계</div>
+              <div class="mt-1 text-2xl font-black text-white tabular-nums">
+                ${sumTotalSSPMeet}<span class="text-sm font-bold text-blue-200">회차</span>
+              </div>
+              <div class="mt-1 text-[11px] text-slate-300">
+                전체 활동(공모전 등 포함): ${allMembers.reduce((s, m) => s + m.total_meetings, 0)}회
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReadableMemberTable(membersList, options = {}) {
+      const { includeOtherCats = false, isAdmin = false } = options;
+
+      // Calculate column sums for the displayed rows
+      const subStudyCnt = membersList.reduce((s, m) => s + m.study_count, 0);
+      const subStudyMeet = membersList.reduce((s, m) => s + m.study_meetings, 0);
+      const subSemCnt = membersList.reduce((s, m) => s + m.seminar_count, 0);
+      const subSemMeet = membersList.reduce((s, m) => s + m.seminar_meetings, 0);
+      const subProjCnt = membersList.reduce((s, m) => s + m.project_count, 0);
+      const subProjMeet = membersList.reduce((s, m) => s + m.project_meetings, 0);
+      const subTotCnt = subStudyCnt + subSemCnt + subProjCnt;
+      const subTotMeet = subStudyMeet + subSemMeet + subProjMeet;
+
+      const rowsHtml = membersList.map(m => {
+        const affil = formatAffiliation(m);
+        const mActs = state.activities.filter(a => a.student_id === m.student_id);
+        const studies = mActs.filter(a => a.activity_type === '스터디');
+        const seminars = mActs.filter(a => a.activity_type === '세미나');
+        const projects = mActs.filter(a => a.activity_type === '프로젝트');
+        const others = mActs.filter(a => !['스터디', '세미나', '프로젝트'].includes(a.activity_type));
+
+        const renderCategoryCell = (actList, count, meetings, colorName) => {
+          const colorMap = {
+            emerald: {
+              badge: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+              sub: 'text-emerald-700',
+              itemBorder: 'border-emerald-200 bg-emerald-50/40',
+              pill: 'bg-emerald-600 text-white'
+            },
+            indigo: {
+              badge: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+              sub: 'text-indigo-700',
+              itemBorder: 'border-indigo-200 bg-indigo-50/40',
+              pill: 'bg-indigo-600 text-white'
+            },
+            rose: {
+              badge: 'bg-rose-100 text-rose-900 border-rose-300',
+              sub: 'text-rose-700',
+              itemBorder: 'border-rose-200 bg-rose-50/40',
+              pill: 'bg-rose-600 text-white'
+            }
+          }[colorName];
+
+          if (count === 0) {
+            return `
+              <div class="text-center py-2">
+                <span class="inline-block rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-400 tabular-nums">0건 (0회)</span>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="space-y-2">
+              <!-- Count & Total Meetings Header -->
+              <div class="flex items-center justify-between rounded-xl border px-3 py-1.5 ${colorMap.badge}">
+                <span class="text-sm font-black tabular-nums">${count}건 참여</span>
+                <span class="rounded-md ${colorMap.pill} px-2 py-0.5 text-xs font-extrabold tabular-nums">총 ${meetings}회차</span>
+              </div>
+
+              <!-- List of Specific Activities & Their Session Dates -->
+              <div class="space-y-1.5">
+                ${actList.map(a => `
+                  <div class="rounded-xl border ${colorMap.itemBorder} p-2.5 text-left transition hover:bg-white">
+                    <div class="flex items-start justify-between gap-1.5">
+                      <div class="font-bold text-xs text-slate-900 leading-snug">
+                        ${escapeHtml(a.title)}
+                        ${a.user_modified ? `<span class="ml-1 rounded bg-blue-600 px-1.5 py-0.2 text-[10px] font-bold text-white">수정됨</span>` : ''}
+                      </div>
+                      <div class="shrink-0 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onclick="adjustSessionCount('${a.id}', -1)"
+                          title="회차 감소"
+                          class="h-5 w-5 rounded border border-slate-300 bg-white text-[11px] font-bold text-slate-700 hover:bg-slate-100">-</button>
+                        <span class="text-xs font-extrabold ${colorMap.sub} tabular-nums px-0.5">${a.meeting_count}회</span>
+                        <button
+                          type="button"
+                          onclick="adjustSessionCount('${a.id}', 1)"
+                          title="회차 추가"
+                          class="h-5 w-5 rounded border border-slate-300 bg-white text-[11px] font-bold text-blue-600 hover:bg-blue-50">+</button>
+                      </div>
+                    </div>
+                    <!-- Session Dates Pills -->
+                    <div class="mt-1.5 flex flex-wrap gap-1">
+                      ${a.sessions.map((s, sIdx) => `
+                        <label class="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-700 cursor-pointer hover:border-blue-500" title="클릭하여 ${s.label} 날짜 변경">
+                          <b class="text-slate-900">${s.label}</b>
+                          <input
+                            type="date"
+                            value="${escapeHtml(s.date)}"
+                            onchange="updateSessionDate('${a.id}', ${sIdx}, this.value)"
+                            class="w-[86px] bg-transparent text-[10px] font-medium text-slate-600 tabular-nums outline-none cursor-pointer"
+                          />
+                        </label>
+                      `).join('')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        };
+
+        const otherSummaryHtml = (includeOtherCats && others.length > 0) ? `
+          <div class="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2 text-left">
+            <div class="text-[11px] font-bold text-slate-600 mb-1">기타 활동 (${others.length}건)</div>
+            <div class="space-y-1">
+              ${others.map(o => `
+                <div class="text-[11px] text-slate-600 flex items-center justify-between gap-1">
+                  <span class="truncate">• [${escapeHtml(o.activity_type)}] ${escapeHtml(o.title)}</span>
+                  <span class="shrink-0 font-mono text-[10px] text-slate-400">${o.start_date || ''}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : '';
+
+        return `
+          <tr class="border-b border-slate-200 hover:bg-blue-50/20 align-top transition">
+            <!-- 1. 학번 -->
+            <td class="px-3.5 py-4 text-sm font-mono font-bold text-slate-800 tabular-nums whitespace-nowrap">
+              <div>${escapeHtml(m.student_id)}</div>
+              <div class="text-[11px] font-sans font-normal text-slate-400">회원 #${m.member_no}</div>
+            </td>
+
+            <!-- 2. 성명 -->
+            <td class="px-3.5 py-4 whitespace-nowrap">
+              <button
+                type="button"
+                onclick="jumpToMemberEdit('${escapeHtml(m.name)}')"
+                class="group text-left">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-base font-extrabold text-slate-900 group-hover:text-blue-600 group-hover:underline">
+                    ${escapeHtml(m.name)}
+                  </span>
+                  ${m.has_modified ? `<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300">입력됨</span>` : ''}
+                </div>
+                <div class="mt-0.5 text-[11px] font-semibold text-blue-600 opacity-80 group-hover:opacity-100">
+                  ✎ 회차 입력·수정 →
+                </div>
+              </button>
+            </td>
+
+            <!-- 3. 소속 -->
+            <td class="px-3.5 py-4 text-xs text-slate-700 min-w-[150px] max-w-[210px]">
+              <div class="font-bold text-slate-900 leading-snug">${escapeHtml(affil.primary)}</div>
+              ${affil.sub ? `<div class="mt-1 inline-block rounded bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">${escapeHtml(affil.sub)}</div>` : ''}
+            </td>
+
+            <!-- 4. 학년 -->
+            <td class="px-3 py-4 text-center whitespace-nowrap">
+              <span class="inline-flex items-center justify-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-extrabold text-slate-800 tabular-nums">
+                ${escapeHtml(m.grade)}${m.grade === '미입력' ? '' : '학년'}
+              </span>
+            </td>
+
+            <!-- 5. 스터디 참여 -->
+            <td class="px-3 py-4 min-w-[220px]">
+              ${renderCategoryCell(studies, m.study_count, m.study_meetings, 'emerald')}
+            </td>
+
+            <!-- 6. 세미나 참여 -->
+            <td class="px-3 py-4 min-w-[220px]">
+              ${renderCategoryCell(seminars, m.seminar_count, m.seminar_meetings, 'indigo')}
+            </td>
+
+            <!-- 7. 프로젝트 참여 -->
+            <td class="px-3 py-4 min-w-[240px]">
+              ${renderCategoryCell(projects, m.project_count, m.project_meetings, 'rose')}
+              ${otherSummaryHtml}
+            </td>
+
+            <!-- 8. 총 참여 합계 -->
+            <td class="px-3.5 py-4 text-center whitespace-nowrap">
+              <div class="inline-flex flex-col items-center justify-center rounded-2xl px-4 py-2.5 ${
+                m.ssp_total_count >= 3
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : m.ssp_total_count > 0
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-400'
+              }">
+                <span class="text-base font-black tabular-nums">총 ${m.ssp_total_count}건</span>
+                <span class="mt-0.5 text-xs font-bold opacity-95 tabular-nums">모임 ${m.ssp_meetings}회차</span>
+              </div>
+              <div class="mt-1.5 text-[11px] text-slate-500 tabular-nums">
+                스터디${m.study_count} · 세미나${m.seminar_count} · 플젝${m.project_count}
+              </div>
+              ${m.is_3plus_ssp ? `<div class="mt-1 text-[11px] font-extrabold text-blue-600">★ 3건 이상 참여</div>` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+            <div>
+              조회 인원: <b class="text-slate-900">${membersList.length}명</b>
+              <span class="mx-1.5 text-slate-300">|</span>
+              표시된 합계: 스터디 <b class="text-emerald-700">${subStudyCnt}건(${subStudyMeet}회차)</b> ·
+              세미나 <b class="text-indigo-700">${subSemCnt}건(${subSemMeet}회차)</b> ·
+              프로젝트 <b class="text-rose-700">${subProjCnt}건(${subProjMeet}회차)</b> ·
+              총 참여 합계 <b class="text-blue-700">${subTotCnt}건(${subTotMeet}회차)</b>
+            </div>
+            <div class="text-slate-500">
+              💡 표 안의 <b>+ / - 버튼</b>이나 <b>회차 날짜</b>를 클릭하여 바로 수정하거나, 이름을 눌러 상세 화면으로 이동할 수 있습니다.
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left">
+              <thead>
+                <tr class="border-b-2 border-slate-200 bg-slate-100/90 text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                  <th class="px-3.5 py-3.5 whitespace-nowrap">학번</th>
+                  <th class="px-3.5 py-3.5 whitespace-nowrap">성명</th>
+                  <th class="px-3.5 py-3.5 whitespace-nowrap">소속</th>
+                  <th class="px-3 py-3.5 text-center whitespace-nowrap">학년</th>
+                  <th class="px-3 py-3.5 text-center text-emerald-800 bg-emerald-50/60 whitespace-nowrap">📗 스터디 참여 (활동명 · 회차 · 날짜)</th>
+                  <th class="px-3 py-3.5 text-center text-indigo-800 bg-indigo-50/60 whitespace-nowrap">📘 세미나 참여 (활동명 · 회차 · 날짜)</th>
+                  <th class="px-3 py-3.5 text-center text-rose-800 bg-rose-50/60 whitespace-nowrap">📕 프로젝트 참여 (활동명 · 회차 · 날짜)</th>
+                  <th class="px-3.5 py-3.5 text-center text-blue-800 bg-blue-50/60 whitespace-nowrap">총 참여 합계</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || `
+                  <tr>
+                    <td colspan="8" class="py-12 text-center text-sm text-slate-400">
+                      조건에 해당하는 회원이 없습니다.
+                    </td>
+                  </tr>
+                `}
+              </tbody>
+              ${membersList.length > 0 ? `
+                <tfoot>
+                  <tr class="border-t-2 border-slate-300 bg-slate-100 font-extrabold text-xs text-slate-900">
+                    <td colspan="4" class="px-4 py-3.5 text-right">표시 인원 (${membersList.length}명) 전체 합계</td>
+                    <td class="px-3 py-3.5 text-center text-emerald-800 tabular-nums">스터디 총 ${subStudyCnt}건 (모임 ${subStudyMeet}회차)</td>
+                    <td class="px-3 py-3.5 text-center text-indigo-800 tabular-nums">세미나 총 ${subSemCnt}건 (모임 ${subSemMeet}회차)</td>
+                    <td class="px-3 py-3.5 text-center text-rose-800 tabular-nums">프로젝트 총 ${subProjCnt}건 (모임 ${subProjMeet}회차)</td>
+                    <td class="px-3.5 py-3.5 text-center text-blue-700 tabular-nums">총 ${subTotCnt}건 (${subTotMeet}회차)</td>
+                  </tr>
+                </tfoot>
+              ` : ''}
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function jumpToMemberEdit(name) {
+      switchMode('member');
+      selectMemberByName(name);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function setPublicTableFilter(f) {
+      publicTableFilter = f;
+      ['all', 'ssp_any', '3plus'].forEach(k => {
+        const btn = document.getElementById('ptf-' + k);
+        if (!btn) return;
+        btn.className = k === f
+          ? 'rounded-full bg-slate-900 px-3.5 py-1.5 font-bold text-white'
+          : 'rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50';
+      });
+      renderPublicSummarySection();
+    }
+
+    function renderPublicSummarySection() {
+      let list = [...state.members];
+      if (publicTableFilter === 'ssp_any') list = list.filter(m => m.ssp_total_count > 0);
+      if (publicTableFilter === '3plus') list = list.filter(m => m.is_3plus_ssp);
+
+      // Default sort: members with activities first, then by student_id
+      list.sort((a, b) => {
+        if (b.ssp_total_count !== a.ssp_total_count) return b.ssp_total_count - a.ssp_total_count;
+        return a.student_id.localeCompare(b.student_id);
+      });
+
+      document.getElementById('public-stats-banner').innerHTML = buildOverallStatsBannerHtml(list);
+      document.getElementById('public-summary-table').innerHTML = renderReadableMemberTable(list, {
+        includeOtherCats: false,
+        isAdmin: false
+      });
+    }
+
+    function renderMemberMode() {
+      renderQuickMemberChips();
+      renderMemberSearchResult();
+      renderPublicSummarySection();
+    }
+
+    // =========================================================================
+    // ADMIN DASHBOARD RENDERING
+    // =========================================================================
+    function initAdminDeptFilter() {
+      const sel = document.getElementById('admin-filter-dept');
+      if (!sel) return;
+      const depts = new Set();
+      state.members.forEach(m => {
+        if (m.department) depts.add(m.department);
+        if (m.club_group && m.club_group !== '해당없음') depts.add(m.club_group);
+      });
+      const currentVal = sel.value;
+      sel.innerHTML = `<option value="">소속(트랙/소모임) 전체</option>` +
+        Array.from(depts).map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      sel.value = currentVal;
+    }
+
+    function setAdminMemberFilter(f) {
+      adminMemberFilter = f;
+      ['all', 'ssp_any', '3plus', 'modified'].forEach(k => {
+        const btn = document.getElementById('amf-' + k);
+        if (!btn) return;
+        btn.className = k === f
+          ? 'rounded-full bg-blue-600 px-3.5 py-1.5 font-bold text-white shadow-sm'
+          : 'rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50';
+      });
+      renderAdminDashboard();
+    }
+
+    function renderAdminDashboard() {
+      initAdminDeptFilter();
+
+      const q = (document.getElementById('admin-search')?.value || '').trim().toLowerCase();
+      const dept = document.getElementById('admin-filter-dept')?.value || '';
+      const grade = document.getElementById('admin-filter-grade')?.value || '';
+      const sortBy = document.getElementById('admin-sort-by')?.value || 'total_desc';
+      const includeOtherCats = document.getElementById('admin-include-other-cats')?.checked || false;
+
+      let filtered = state.members.filter(m => {
+        if (dept && m.department !== dept && m.club_group !== dept) return false;
+        if (grade && m.grade !== grade) return false;
+        if (adminMemberFilter === 'ssp_any' && m.ssp_total_count === 0) return false;
+        if (adminMemberFilter === '3plus' && !m.is_3plus_ssp) return false;
+        if (adminMemberFilter === 'modified' && !m.has_modified) return false;
+
+        if (q) {
+          const mActs = state.activities.filter(a => a.student_id === m.student_id);
+          const actText = mActs.map(a => `${a.title} ${a.activity_type} ${a.organizer} ${a.role}`).join(' ');
+          const hay = `${m.student_id} ${m.name} ${m.department} ${m.club_group} ${actText}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        if (sortBy === 'total_desc') {
+          if (b.ssp_total_count !== a.ssp_total_count) return b.ssp_total_count - a.ssp_total_count;
+          return b.ssp_meetings - a.ssp_meetings;
+        }
+        if (sortBy === 'meetings_desc') {
+          if (b.ssp_meetings !== a.ssp_meetings) return b.ssp_meetings - a.ssp_meetings;
+          return b.ssp_total_count - a.ssp_total_count;
+        }
+        if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'ko');
+        if (sortBy === 'grade_asc') return String(a.grade).localeCompare(String(b.grade));
+        return a.student_id.localeCompare(b.student_id);
+      });
+
+      // Modified count badge
+      const modCount = state.activities.filter(a => a.user_modified).length;
+      const modBadge = document.getElementById('admin-modified-count-badge');
+      if (modBadge) {
+        modBadge.textContent = modCount > 0 ? `일반 회원 입력·수정 ${modCount}건 반영됨` : '초기 제공 데이터 기준';
+      }
+
+      // Recent update logs box
+      const logBox = document.getElementById('admin-recent-updates-box');
+      if (state.updateLogs && state.updateLogs.length > 0) {
+        logBox.classList.remove('hidden');
+        logBox.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-extrabold text-amber-900">🔔 일반 회원이 입력·수정한 모임 회차 및 날짜 실시간 내역 (${state.updateLogs.length}건)</span>
+            <button onclick="state.updateLogs=[]; saveState(); renderAdminDashboard();" class="text-[11px] text-amber-700 underline">기록 비우기</button>
+          </div>
+          <ul class="space-y-1 max-h-28 overflow-y-auto text-xs text-amber-900">
+            ${state.updateLogs.map(l => `<li>• <span class="font-mono text-[11px] text-amber-700">[${escapeHtml(l.time)}]</span> ${escapeHtml(l.message)}</li>`).join('')}
+          </ul>
+        `;
+      } else {
+        logBox.classList.add('hidden');
+      }
+
+      // Render Overall Stats Banner above table
+      document.getElementById('admin-stats-banner').innerHTML = buildOverallStatsBannerHtml(filtered);
+
+      // Render Main Table
+      document.getElementById('admin-main-table-container').innerHTML = renderReadableMemberTable(filtered, {
+        includeOtherCats,
+        isAdmin: true
+      });
+    }
+
+    function resetAllToInitial() {
+      if (!confirm('일반 회원이 추가·수정한 회차 및 날짜를 모두 초기 제공 파일 상태로 되돌릴까요?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state = JSON.parse(JSON.stringify(window.GAON_INITIAL_DATA));
+      state.updateLogs = [];
+      recalcAll();
+      renderAfterDataChange();
+      showToast('초기 데이터로 복원되었습니다.');
+    }
+
+    // =========================================================================
+    // NEW ACTIVITY MODAL
+    // =========================================================================
+    function openNewActivityModal(preselectedSid) {
+      const sel = document.getElementById('new-act-member');
+      sel.innerHTML = state.members.map(m =>
+        `<option value="${escapeHtml(m.student_id)}">${escapeHtml(m.name)} (${escapeHtml(m.student_id)} · ${escapeHtml(m.grade)}학년 · ${escapeHtml(m.department || 'ICT융합학부')})</option>`
+      ).join('');
+
+      if (preselectedSid) {
+        sel.value = preselectedSid;
+      } else if (selectedMemberQuery) {
+        const found = state.members.find(m => m.name.includes(selectedMemberQuery) || m.student_id.includes(selectedMemberQuery));
+        if (found) sel.value = found.student_id;
+      }
+
+      document.getElementById('new-act-title').value = '';
+      document.getElementById('new-act-role').value = '';
+      document.getElementById('new-act-count').value = '3';
+      syncNewActModalSessions();
+
+      const modal = document.getElementById('new-activity-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeNewActivityModal() {
+      const modal = document.getElementById('new-activity-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function syncNewActModalSessions() {
+      const cnt = Math.max(1, Math.min(30, parseInt(document.getElementById('new-act-count').value, 10) || 3));
+      const box = document.getElementById('new-act-sessions-list');
+      const existing = Array.from(box.querySelectorAll('.new-act-date-input')).map(i => i.value);
+      const base = new Date('2026-09-07');
+      let html = '';
+      for (let i = 0; i < cnt; i++) {
+        let iso = existing[i];
+        if (!iso) {
+          const d = new Date(base);
+          d.setDate(d.getDate() + i * 7);
+          iso = d.toISOString().slice(0, 10);
+        }
+        html += `
+          <div class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+            <span class="w-12 shrink-0 font-extrabold text-slate-700">${i + 1}회차</span>
+            <input type="date" value="${iso}" class="new-act-date-input flex-1 rounded border border-slate-300 px-2 py-1 font-semibold tabular-nums" />
+          </div>
+        `;
+      }
+      box.innerHTML = html;
+    }
+
+    function addNewActModalSessionRow() {
+      const inp = document.getElementById('new-act-count');
+      inp.value = Math.min(30, (parseInt(inp.value, 10) || 1) + 1);
+      syncNewActModalSessions();
+    }
+
+    function saveNewActivityModal() {
+      const sid = document.getElementById('new-act-member').value;
+      const actType = document.getElementById('new-act-type').value;
+      const title = document.getElementById('new-act-title').value.trim();
+      const role = document.getElementById('new-act-role').value.trim();
+
+      if (!title) {
+        alert('활동명(스터디/세미나/프로젝트명)을 입력해 주세요.');
+        return;
+      }
+
+      const dateInputs = Array.from(document.querySelectorAll('.new-act-date-input'));
+      const sessions = dateInputs.map((inp, idx) => ({
+        session_no: idx + 1,
+        label: `${idx + 1}회차`,
+        date: inp.value || '2026-09-07'
+      }));
+
+      const m = state.members.find(x => x.student_id === sid);
+      const newAct = {
+        id: 'act-' + Date.now(),
+        student_id: sid,
+        member_no: m ? m.member_no : 0,
+        name: m ? m.name : '',
+        grade: m ? m.grade : '1',
+        department: m ? m.department : '',
+        club_group: m ? m.club_group : '',
+        original_category: actType === '프로젝트' ? 'project' : 'outreach',
+        activity_type: actType,
+        activity_subtype: actType,
+        scope: '교내',
+        title,
+        organizer: '',
+        start_date: sessions[0]?.date || '2026-09-07',
+        end_date: sessions[sessions.length - 1]?.date || '',
+        team_type: '팀',
+        team_name: '',
+        team_size: null,
+        role,
+        status: '참가 완료',
+        award_level: '',
+        award_tier: '',
+        link: '',
+        repo_url: '',
+        tech_stack: '',
+        dev_form: '',
+        project_state: '',
+        meeting_count: sessions.length,
+        sessions,
+        session_schedule_text: sessions.map(s => `${s.label}(${s.date})`).join(', '),
+        meeting_basis: `회원 직접 등록 (${sessions.length}회차)`,
+        evidence_count: 0,
+        evidence_possible: false,
+        evidence_impossible_checked: false,
+        evidence_status: '',
+        evidence_photos: [],
+        verified: false,
+        user_modified: true
+      };
+
+      state.activities.push(newAct);
+      saveState(`${m ? m.name : sid} 회원이 새 [${actType}] '${title}' (${sessions.length}회차) 활동을 등록했습니다.`);
+      closeNewActivityModal();
+
+      if (m && currentMode === 'member') {
+        selectMemberByName(m.name);
+      }
+      renderAfterDataChange();
+      showToast(`'${title}' 활동(${sessions.length}회차)이 추가되었습니다.`);
+    }
+
+    // =========================================================================
+    // CSV EXPORT (ADMIN)
+    // =========================================================================
+    function downloadCsv(filename, rows) {
+      const esc = v => {
+        const s = v == null ? '' : String(v);
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = '\uFEFF' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }
+
+    function exportAdminSummaryCSV() {
+      const rows = [[
+        '학번', '성명', '소속(트랙)', '소모임', '학년',
+        '스터디 참여(건)', '스터디 모임합계(회차)',
+        '세미나 참여(건)', '세미나 모임합계(회차)',
+        '프로젝트 참여(건)', '프로젝트 모임합계(회차)',
+        '총 참여 합계(건)', '총 모임 합계(회차)',
+        '참여 스터디·세미나·프로젝트 및 회차별 날짜 상세 내역'
+      ]];
+
+      state.members.forEach(m => {
+        rows.push([
+          m.student_id,
+          m.name,
+          m.department || 'ICT융합학부',
+          m.club_group || '해당없음',
+          m.grade,
+          m.study_count,
+          m.study_meetings,
+          m.seminar_count,
+          m.seminar_meetings,
+          m.project_count,
+          m.project_meetings,
+          m.ssp_total_count,
+          m.ssp_meetings,
+          m.ssp_summary_text
+        ]);
+      });
+
+      downloadCsv('동아리_회원별_스터디_세미나_프로젝트_참여현황표.csv', rows);
+    }
+
+    function exportAdminDetailedSessionsCSV() {
+      const rows = [[
+        '학번', '성명', '소속', '학년', '활동구분', '활동명(스터디/세미나/프로젝트)',
+        '총 모임횟수(회차)', '회차별 모임 날짜(1회차, 2회차...)', '역할', '시작일', '종료일'
+      ]];
+
+      state.activities
+        .filter(a => ['스터디', '세미나', '프로젝트'].includes(a.activity_type))
+        .forEach(a => {
+          rows.push([
+            a.student_id,
+            a.name,
+            a.department || 'ICT융합학부',
+            a.grade,
+            a.activity_type,
+            a.title,
+            a.meeting_count,
+            a.session_schedule_text,
+            a.role,
+            a.start_date,
+            a.end_date
+          ]);
+        });
+
+      downloadCsv('동아리_활동별_회차_및_날짜_상세내역.csv', rows);
+    }
+
+    // =========================================================================
+    // INITIALIZE
+    // =========================================================================
+    function initApp() {
+      loadState();
+      if (sessionStorage.getItem(ADMIN_AUTH_KEY) === '1') {
+        isAdminAuthed = true;
+        document.getElementById('admin-unlocked-badge').classList.remove('hidden');
+      }
+      // Pre-select a representative active member so the user immediately sees how the side-by-side session editor works
+      selectMemberByName('이하은');
+      renderMemberMode();
+    }
+
+    initApp();
+  </script>
+</body>
+</html>
