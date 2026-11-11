@@ -660,22 +660,46 @@
           if (!remote) return;
           const local = state.activities.find(a => a.id === actId);
           if (local) {
-            if (local.is_gaon_checked !== remote.is_gaon_checked ||
-                local.meeting_count !== remote.meeting_count ||
-                local.gaon_category !== remote.gaon_category ||
-                local.first_session_date !== remote.first_session_date ||
-                local.last_session_date !== remote.last_session_date) {
+            // Smart Conflict Resolution:
+            // If local was modified by the user, compare modification timestamps
+            if (local.user_modified) {
+              const localTime = new Date(local.last_modified_at || 0).getTime();
+              const remoteTime = new Date(remote.last_modified_at || 0).getTime();
+
+              // If local edit is newer or remote hasn't recorded user_modified yet:
+              // Protect local changes! Do NOT revert or uncheck! Push local to cloud.
+              if (!remote.user_modified || localTime > remoteTime) {
+                syncActivityToCloud(local);
+                return;
+              }
+            }
+
+            // Remote is newer or equal, or local has never been modified
+            const isDifferent = (
+              Boolean(local.is_gaon_checked) !== Boolean(remote.is_gaon_checked) ||
+              local.meeting_count !== remote.meeting_count ||
+              local.gaon_category !== remote.gaon_category ||
+              local.first_session_date !== remote.first_session_date ||
+              local.last_session_date !== remote.last_session_date ||
+              local.gaon_member_count !== remote.gaon_member_count
+            );
+
+            if (isDifferent) {
               local.is_gaon_checked = Boolean(remote.is_gaon_checked);
               local.meeting_count = remote.meeting_count;
               local.gaon_category = remote.gaon_category;
               local.first_session_date = remote.first_session_date;
               local.last_session_date = remote.last_session_date;
-              local.session_schedule_text = remote.session_schedule_text;
-              local.gaon_member_count = remote.gaon_member_count;
-              local.user_modified = remote.user_modified;
-              local.last_modified_at = remote.last_modified_at;
+              local.session_schedule_text = remote.session_schedule_text || local.session_schedule_text;
+              local.gaon_member_count = remote.gaon_member_count || local.gaon_member_count;
+              local.user_modified = Boolean(remote.user_modified);
+              local.last_modified_at = remote.last_modified_at || local.last_modified_at;
               changed = true;
             }
+          } else if (remote.title && remote.student_id) {
+            // New activity created by another member or admin in cloud
+            state.activities.push(remote);
+            changed = true;
           }
         });
 
@@ -695,23 +719,48 @@
     }
 
     function syncActivityToCloud(act) {
-      if (!CLOUD_DB_URL) return;
+      if (!CLOUD_DB_URL || !act || !act.id) return;
+      act.user_modified = true;
+      if (!act.last_modified_at) {
+        act.last_modified_at = new Date().toISOString();
+      }
       const url = `${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities/${act.id}.json`;
+      const payload = {
+        id: act.id,
+        is_gaon_checked: Boolean(act.is_gaon_checked),
+        meeting_count: act.meeting_count || 1,
+        gaon_category: act.gaon_category || '스터디',
+        first_session_date: act.first_session_date || '',
+        last_session_date: act.last_session_date || '',
+        session_schedule_text: act.session_schedule_text || '',
+        gaon_member_count: act.gaon_member_count || 2,
+        user_modified: true,
+        last_modified_by: act.name || '',
+        last_modified_at: act.last_modified_at
+      };
+      if (act.id.startsWith('act-')) {
+        Object.assign(payload, {
+          title: act.title || '',
+          student_id: act.student_id || '',
+          name: act.name || '',
+          grade: act.grade || '1',
+          department: act.department || '',
+          club_group: act.club_group || '',
+          original_section: act.original_section || '',
+          original_kind: act.original_kind || '',
+          activity_type: act.activity_type || '',
+          role: act.role || '',
+          scope: act.scope || '교내',
+          status: act.status || '참가 완료',
+          team_type: act.team_type || '팀',
+          team_size: String(act.gaon_member_count || 2),
+          csv_team_candidate: true
+        });
+      }
       fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          is_gaon_checked: Boolean(act.is_gaon_checked),
-          meeting_count: act.meeting_count,
-          gaon_category: act.gaon_category,
-          first_session_date: act.first_session_date,
-          last_session_date: act.last_session_date,
-          session_schedule_text: act.session_schedule_text,
-          gaon_member_count: act.gaon_member_count,
-          user_modified: true,
-          last_modified_by: act.name,
-          last_modified_at: new Date().toISOString()
-        })
+        body: JSON.stringify(payload)
       }).then(res => {
         if (res.ok) {
           updateCloudDbStatusUI(true);
@@ -869,6 +918,7 @@
             act.user_modified = true;
             act.last_modified_at = new Date().toISOString();
             mergedCount++;
+            syncActivityToCloud(act);
           }
         });
 
@@ -2258,6 +2308,7 @@
         showToast(`'${act.title}' — 가온누리 실적 체크가 해제되었습니다.`);
       }
       renderAfterDataChange();
+      syncActivityToCloud(act);
     }
 
     function changeGaonCategory(actId, newCat) {
@@ -2266,8 +2317,10 @@
       if (isOfficialFixed(act)) { showToast("🔒 동아리 공식 행사는 회차 및 참여 동아리원 수정이 불가능합니다."); renderAfterDataChange(); return; }
       act.gaon_category = newCat;
       act.user_modified = true;
+      act.last_modified_at = new Date().toISOString();
       saveState(`${act.name}(${act.student_id}) 회원의 가온누리 실적 '${act.title}' 구분이 [${newCat}](으)로 설정되었습니다.`);
       renderAfterDataChange();
+      syncActivityToCloud(act);
       showToast(`'${act.title}' 구분이 [${newCat}](으)로 변경되었습니다.`);
     }
 
@@ -2278,8 +2331,10 @@
       const c = Math.max(2, Math.min(50, Number(newMemberCnt) || 2));
       act.gaon_member_count = c;
       act.user_modified = true;
+      act.last_modified_at = new Date().toISOString();
       saveState(`${act.name}(${act.student_id}) 회원이 '${act.title}' 참여 동아리원 수를 본인 포함 ${c}명으로 설정했습니다.`);
       renderAfterDataChange();
+      syncActivityToCloud(act);
       showToast(`참여 동아리원 수가 본인 포함 ${c}명으로 저장되었습니다.`);
     }
 
@@ -2307,6 +2362,7 @@
 
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}' 모임 횟수를 총 ${cnt}회차(${act.session_schedule_text})로 설정했습니다.`);
       renderAfterDataChange();
+      syncActivityToCloud(act);
       const evalStCnt = getEvalPeriodStatus(act);
       if (evalStCnt.hasWarning) {
         showToast(`⚠️ 총 ${cnt}회차 저장됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있으니 날짜를 확인해 주세요.`, 'warn');
@@ -2346,6 +2402,7 @@
       const evalSt = getEvalPeriodStatus(act);
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}'의 ${labelStr} 날짜를 ${newDate}로 입력했습니다.${evalSt.hasWarning ? ' [평가기간 외 날짜]' : ''}`);
       renderAfterDataChange();
+      syncActivityToCloud(act);
       if (evalSt.hasWarning) {
         showToast(`⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 경고: ${evalSt.reasons[0]}`, 'warn');
       } else {
@@ -3043,6 +3100,7 @@
       saveState(`${m ? m.name : sid} 회원이 새 가온누리 [${actType}] '${title}' (동아리원 ${clubCnt}명 · 총 ${cnt}회차) 실적을 등록했습니다.`);
       closeNewActivityModal();
       renderAfterDataChange();
+      syncActivityToCloud(newAct);
       if (evalSt.hasWarning) {
         showToast(`⚠️ '${title}' 등록됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있습니다.`, 'warn');
       } else {
@@ -3178,10 +3236,23 @@
       // 4. Background asynchronous load from IndexedDB (survives any browser cache purge)
       loadFromIndexedDb().then((idbState) => {
         if (idbState && Array.isArray(idbState.activities) && idbState.activities.length > 0) {
-          const idbHasMod = idbState.activities.some(a => a.user_modified || a.is_gaon_checked);
-          const curHasMod = state.activities.some(a => a.user_modified || a.is_gaon_checked);
-          if (idbHasMod || !curHasMod) {
-            state = idbState;
+          let merged = false;
+          idbState.activities.forEach(idbAct => {
+            if (!idbAct || !idbAct.id) return;
+            const curAct = state.activities.find(a => a.id === idbAct.id);
+            if (curAct) {
+              const curTime = new Date(curAct.last_modified_at || 0).getTime();
+              const idbTime = new Date(idbAct.last_modified_at || 0).getTime();
+              if (idbAct.user_modified && (!curAct.user_modified || idbTime > curTime)) {
+                Object.assign(curAct, idbAct);
+                merged = true;
+              }
+            } else {
+              state.activities.push(idbAct);
+              merged = true;
+            }
+          });
+          if (merged) {
             recalcAll();
             renderAfterDataChange();
           }
