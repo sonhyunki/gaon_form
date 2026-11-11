@@ -64,23 +64,29 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <!-- DB Persistence Badge & Controls -->
-        <div class="flex items-center gap-1.5">
-          <span id="db-status-badge" class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 shadow-2xs">
-            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="db-status-text">💾 DB 저장됨</span>
-          </span>
+        <!-- Live Shared Cloud DB Status & Setup -->
+        <button
+          type="button"
+          onclick="openCloudDbModal()"
+          id="cloud-db-badge-btn"
+          class="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-2xs hover:bg-rose-100 transition">
+          <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+          <span id="cloud-db-status-text">☁️ 클라우드 DB 미연동 (클릭하여 설정)</span>
+        </button>
+
+        <!-- Local DB Backup & Restore -->
+        <div class="hidden sm:flex items-center gap-1.5">
           <button
             type="button"
             onclick="exportDbBackupJson()"
             title="현재 DB 상태를 JSON 백업 파일로 다운로드합니다."
             class="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
-            📥 DB 백업
+            📥 전체 백업
           </button>
           <label
             title="이전에 백업한 DB JSON 파일을 불러와 복원합니다."
             class="cursor-pointer rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
-            <span>📤 DB 복원</span>
+            <span>📤 백업 복원</span>
             <input type="file" accept=".json" class="hidden" onchange="importDbBackupJson(event)" />
           </label>
         </div>
@@ -531,7 +537,339 @@
     }
 
     // =========================================================================
-    // MULTI-TIER PERSISTENT DB ENGINE (IndexedDB + LocalStorage + Server SQLite)
+    
+    // =========================================================================
+    // REALTIME SHARED CLOUD DB ENGINE (Firebase Realtime Database REST API)
+    // =========================================================================
+    let CLOUD_DB_URL = localStorage.getItem('gaon_cloud_db_url') || '';
+
+    function normalizeFirebaseUrl(url) {
+      if (!url) return '';
+      let clean = url.trim();
+      if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+        clean = 'https://' + clean;
+      }
+      if (clean.endsWith('/')) clean = clean.slice(0, -1);
+      if (clean.endsWith('.json')) clean = clean.slice(0, -5);
+      return clean;
+    }
+
+    function openCloudDbModal() {
+      const modal = document.getElementById('cloud-db-modal');
+      const input = document.getElementById('cloud-db-url-input');
+      const uploadBtn = document.getElementById('cloud-db-upload-btn');
+      if (input) input.value = CLOUD_DB_URL || '';
+      if (uploadBtn) {
+        if (CLOUD_DB_URL) uploadBtn.classList.remove('hidden');
+        else uploadBtn.classList.add('hidden');
+      }
+      modal?.classList.remove('hidden');
+    }
+
+    function closeCloudDbModal() {
+      document.getElementById('cloud-db-modal')?.classList.add('hidden');
+    }
+
+    async function connectCloudDbFromInput() {
+      const raw = document.getElementById('cloud-db-url-input')?.value || '';
+      const clean = normalizeFirebaseUrl(raw);
+      if (!clean || !clean.includes('firebaseio.com')) {
+        alert('올바른 Firebase Realtime Database URL을 입력해 주세요.\n예: https://your-project-default-rtdb.firebaseio.com');
+        return;
+      }
+
+      showToast('☁️ Firebase 클라우드 DB 연결을 확인하는 중...');
+      try {
+        // Test connection
+        const testRes = await fetch(`${clean}/activities.json?shallow=true`, { cache: 'no-store' });
+        if (!testRes.ok) throw new Error(`HTTP ${testRes.status}`);
+
+        CLOUD_DB_URL = clean;
+        localStorage.setItem('gaon_cloud_db_url', clean);
+        updateCloudDbStatusUI(true);
+
+        // Upload initial full dataset if remote is empty
+        const dataRes = await fetch(`${clean}/activities.json`, { cache: 'no-store' });
+        const existing = await dataRes.json();
+        if (!existing || Object.keys(existing).length === 0) {
+          await uploadCurrentStateToCloudDb();
+        } else {
+          await syncFromCloudDb();
+        }
+
+        closeCloudDbModal();
+        showToast('🎉 클라우드 DB가 정상적으로 연결되었습니다! 모든 사용자의 체크가 실시간 공유됩니다.');
+      } catch (err) {
+        alert(`클라우드 DB 연결에 실패했습니다.\n사유: ${err.message}\n\nFirebase 보안 규칙에서 '테스트 모드(read, write: true)'로 설정되었는지 확인해 주세요.`);
+      }
+    }
+
+    function disconnectCloudDb() {
+      if (!confirm('클라우드 DB 연결을 해제하고 로컬 모드로 전환할까요?')) return;
+      CLOUD_DB_URL = '';
+      localStorage.removeItem('gaon_cloud_db_url');
+      updateCloudDbStatusUI(false);
+      closeCloudDbModal();
+      showToast('클라우드 DB 연결이 해제되었습니다 (로컬 모드).');
+    }
+
+    async function uploadCurrentStateToCloudDb() {
+      if (!CLOUD_DB_URL) return;
+      showToast('☁️ 현재 548건 전체 실적 데이터를 클라우드 DB에 업로드 중...');
+      try {
+        const actDict = {};
+        state.activities.forEach(a => {
+          actDict[a.id] = {
+            is_gaon_checked: Boolean(a.is_gaon_checked),
+            meeting_count: a.meeting_count || 1,
+            gaon_category: a.gaon_category || '스터디',
+            first_session_date: a.first_session_date || '',
+            last_session_date: a.last_session_date || '',
+            session_schedule_text: a.session_schedule_text || '',
+            gaon_member_count: a.gaon_member_count || 2,
+            user_modified: Boolean(a.user_modified),
+            last_modified_by: a.name || '',
+            last_modified_at: a.last_modified_at || new Date().toISOString()
+          };
+        });
+
+        const res = await fetch(`${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(actDict)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        showToast('🎉 전체 실적이 클라우드 DB로 성공적으로 업로드되었습니다!');
+      } catch (e) {
+        showToast('클라우드 업로드 실패: ' + e.message, 'warn');
+      }
+    }
+
+    async function syncFromCloudDb(silent = false) {
+      if (!CLOUD_DB_URL) return;
+      try {
+        const res = await fetch(`${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities.json`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const remoteActs = await res.json();
+        if (!remoteActs) return;
+
+        let changed = false;
+        Object.entries(remoteActs).forEach(([actId, remote]) => {
+          if (!remote) return;
+          const local = state.activities.find(a => a.id === actId);
+          if (local) {
+            if (local.is_gaon_checked !== remote.is_gaon_checked ||
+                local.meeting_count !== remote.meeting_count ||
+                local.gaon_category !== remote.gaon_category ||
+                local.first_session_date !== remote.first_session_date ||
+                local.last_session_date !== remote.last_session_date) {
+              local.is_gaon_checked = Boolean(remote.is_gaon_checked);
+              local.meeting_count = remote.meeting_count;
+              local.gaon_category = remote.gaon_category;
+              local.first_session_date = remote.first_session_date;
+              local.last_session_date = remote.last_session_date;
+              local.session_schedule_text = remote.session_schedule_text;
+              local.gaon_member_count = remote.gaon_member_count;
+              local.user_modified = remote.user_modified;
+              local.last_modified_at = remote.last_modified_at;
+              changed = true;
+            }
+          }
+        });
+
+        if (changed) {
+          recalcAll();
+          renderAfterDataChange(); syncActivityToCloud(act);
+          // Save to local storage cache as well
+          saveToIndexedDb(state);
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+          if (!silent) showToast('☁️ 다른 회원이 업데이트한 실적 내역을 실시간 동기화했습니다.');
+        }
+        updateCloudDbStatusUI(true);
+      } catch (e) {
+        if (!silent) console.warn('Cloud sync error:', e);
+        updateCloudDbStatusUI(false);
+      }
+    }
+
+    function syncActivityToCloud(act) {
+      if (!CLOUD_DB_URL) return;
+      const url = `${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities/${act.id}.json`;
+      fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_gaon_checked: Boolean(act.is_gaon_checked),
+          meeting_count: act.meeting_count,
+          gaon_category: act.gaon_category,
+          first_session_date: act.first_session_date,
+          last_session_date: act.last_session_date,
+          session_schedule_text: act.session_schedule_text,
+          gaon_member_count: act.gaon_member_count,
+          user_modified: true,
+          last_modified_by: act.name,
+          last_modified_at: new Date().toISOString()
+        })
+      }).catch(err => console.warn('Single activity cloud sync failed:', err));
+    }
+
+    function updateCloudDbStatusUI(connected) {
+      const btn = document.getElementById('cloud-db-badge-btn');
+      const text = document.getElementById('cloud-db-status-text');
+      if (!btn || !text) return;
+
+      if (connected && CLOUD_DB_URL) {
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (모든 사용자 공유)';
+      } else {
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-2xs hover:bg-rose-100 transition';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> 🔴 로컬 전용 (클라우드 DB 미연동 - 클릭하여 설정)';
+      }
+    }
+
+    // Auto-poll cloud DB every 10 seconds for real-time synchronization
+    setInterval(() => {
+      if (CLOUD_DB_URL) {
+        syncFromCloudDb(true);
+      }
+    }, 10000);
+
+    // =========================================================================
+    // MEMBER EXPORT & ADMIN MERGE (Offline / Direct Sharing Support)
+    // =========================================================================
+    function openMemberSubmitModal(studentId) {
+      const m = state.members.find(x => x.student_id === studentId);
+      if (!m) return;
+      const mActs = state.activities.filter(a => a.student_id === studentId);
+      const checkedActs = mActs.filter(a => a.is_gaon_checked);
+
+      const payload = {
+        type: 'GAON_MEMBER_SUBMISSION_V1',
+        student_id: m.student_id,
+        name: m.name,
+        submitted_at: new Date().toISOString(),
+        summary: {
+          checked_count: checkedActs.length,
+          total_meetings: m.ssp_meetings
+        },
+        checks: checkedActs.map(a => ({
+          id: a.id,
+          title: a.title,
+          category: a.gaon_category,
+          meetings: a.meeting_count,
+          first_date: a.first_session_date,
+          last_date: a.last_session_date,
+          member_count: a.gaon_member_count
+        }))
+      };
+
+      const jsonStr = JSON.stringify(payload);
+      const container = document.getElementById('submit-share-content');
+      if (container) {
+        container.innerHTML = `
+          <div class="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-1">
+            <div class="font-bold text-blue-950">${escapeHtml(m.name)}(${escapeHtml(m.student_id)}) 회원님의 체크 현황</div>
+            <div class="text-[11px] text-blue-800">
+              인정 체크: <b>총 ${checkedActs.length}건 · ${m.ssp_meetings}회차</b>
+            </div>
+          </div>
+
+          <p class="text-slate-600 leading-relaxed text-[11px]">
+            클라우드 DB가 연동되지 않은 환경에서는 아래의 <b>제출 코드를 복사</b>하여 관리자에게 카카오톡으로 전송하거나, <b>JSON 파일로 다운로드</b>하여 제출하시면 관리자가 1초 만에 취합할 수 있습니다.
+          </p>
+
+          <div class="space-y-1">
+            <label class="font-bold text-slate-700 text-[11px]">제출 데이터 코드</label>
+            <textarea id="member-submit-code-area" readonly rows="4" class="w-full rounded-xl border border-slate-300 p-2 font-mono text-[10px] text-slate-800 bg-slate-50">${escapeHtml(jsonStr)}</textarea>
+          </div>
+
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onclick="copyMemberSubmitCode()"
+              class="flex-1 rounded-xl bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-700 transition">
+              📋 제출 코드 복사하기
+            </button>
+            <button
+              type="button"
+              onclick="downloadMemberSubmitJson('${escapeHtml(m.name)}', '${escapeHtml(m.student_id)}')"
+              class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition">
+              💾 파일 다운로드
+            </button>
+          </div>
+        `;
+      }
+      document.getElementById('submit-share-modal')?.classList.remove('hidden');
+    }
+
+    function closeSubmitShareModal() {
+      document.getElementById('submit-share-modal')?.classList.add('hidden');
+    }
+
+    function copyMemberSubmitCode() {
+      const area = document.getElementById('member-submit-code-area');
+      if (!area) return;
+      area.select();
+      navigator.clipboard.writeText(area.value).then(() => {
+        showToast('📋 제출 코드가 클립보드에 복사되었습니다! 관리자에게 전송하세요.');
+      }).catch(() => {
+        document.execCommand('copy');
+        showToast('📋 제출 코드가 복사되었습니다.');
+      });
+    }
+
+    function downloadMemberSubmitJson(name, sid) {
+      const area = document.getElementById('member-submit-code-area');
+      if (!area) return;
+      const blob = new Blob([area.value], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `가온실적체크_${name}_${sid}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function openAdminMergeModal() {
+      const code = prompt('회원에게 전달받은 제출 코드(또는 JSON 텍스트)를 여기에 붙여넣어 주세요:');
+      if (!code) return;
+      try {
+        const payload = JSON.parse(code.trim());
+        if (!payload || !Array.isArray(payload.checks)) {
+          alert('올바른 회원 제출 코드 형식이 아닙니다.');
+          return;
+        }
+
+        let mergedCount = 0;
+        payload.checks.forEach(chk => {
+          const act = state.activities.find(a => a.id === chk.id);
+          if (act) {
+            act.is_gaon_checked = true;
+            act.meeting_count = chk.meetings;
+            act.gaon_category = chk.category;
+            if (chk.first_date) act.first_session_date = chk.first_date;
+            if (chk.last_date) act.last_session_date = chk.last_date;
+            if (chk.member_count) act.gaon_member_count = chk.member_count;
+            act.user_modified = true;
+            act.last_modified_at = new Date().toISOString();
+            mergedCount++;
+          }
+        });
+
+        recalcAll();
+        saveState(`${payload.name}(${payload.student_id}) 회원의 체크 내역(${mergedCount}건)을 취합 반영했습니다.`);
+        renderAfterDataChange();
+        showToast(`🎉 ${payload.name} 회원의 실적 체크(${mergedCount}건)가 마스터 DB에 성공적으로 취합되었습니다!`);
+      } catch (err) {
+        alert('코드 파싱 오류: ' + err.message);
+      }
+    }
+
+
+// MULTI-TIER PERSISTENT DB ENGINE (IndexedDB + LocalStorage + Server SQLite)
     // =========================================================================
     const IDB_NAME = 'GAON_CLUB_DATABASE_V1';
     const IDB_VERSION = 1;
@@ -1172,6 +1510,12 @@
                   <div class="text-[10px] text-blue-100">가온누리 총 인정 합계</div>
                   <div class="font-black text-white tabular-nums">총 ${m.ssp_total_count}건 · ${m.ssp_meetings}회차</div>
                 </div>
+                <button
+                  type="button"
+                  onclick="openMemberSubmitModal('${escapeHtml(m.student_id)}')"
+                  class="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-white hover:bg-emerald-600 transition shadow-xs">
+                  📤 내 체크 결과 제출
+                </button>
                 <button
                   type="button"
                   onclick="openNewActivityModal('${escapeHtml(m.student_id)}')"
@@ -1949,7 +2293,7 @@
       normalizeActivityEndpoints(act);
 
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}' 모임 횟수를 총 ${cnt}회차(${act.session_schedule_text})로 설정했습니다.`);
-      renderAfterDataChange();
+      renderAfterDataChange(); syncActivityToCloud(act);
       const evalStCnt = getEvalPeriodStatus(act);
       if (evalStCnt.hasWarning) {
         showToast(`⚠️ 총 ${cnt}회차 저장됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있으니 날짜를 확인해 주세요.`, 'warn');
@@ -1988,7 +2332,7 @@
       const labelStr = which === 'first' ? '1회차' : `마지막(${act.meeting_count}회차)`;
       const evalSt = getEvalPeriodStatus(act);
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}'의 ${labelStr} 날짜를 ${newDate}로 입력했습니다.${evalSt.hasWarning ? ' [평가기간 외 날짜]' : ''}`);
-      renderAfterDataChange();
+      renderAfterDataChange(); syncActivityToCloud(act);
       if (evalSt.hasWarning) {
         showToast(`⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 경고: ${evalSt.reasons[0]}`, 'warn');
       } else {
@@ -2685,7 +3029,7 @@
       state.activities.push(newAct);
       saveState(`${m ? m.name : sid} 회원이 새 가온누리 [${actType}] '${title}' (동아리원 ${clubCnt}명 · 총 ${cnt}회차) 실적을 등록했습니다.`);
       closeNewActivityModal();
-      renderAfterDataChange();
+      renderAfterDataChange(); syncActivityToCloud(act);
       if (evalSt.hasWarning) {
         showToast(`⚠️ '${title}' 등록됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있습니다.`, 'warn');
       } else {
@@ -2778,6 +3122,8 @@
     function initApp() {
       // 1. Synchronous initial load from localStorage
       loadState();
+      updateCloudDbStatusUI(Boolean(CLOUD_DB_URL));
+      if (CLOUD_DB_URL) syncFromCloudDb(true);
 
       // 2. RESTORE SEARCHED MEMBER SYNCHRONOUSLY! (Zero flicker on refresh)
       let initQuery = '';
@@ -2846,5 +3192,121 @@
 
     initApp();
   </script>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: 실시간 공유 클라우드 DB 연동 설정 (Firebase Realtime Database) -->
+  <!-- ========================================================================= -->
+  <div id="cloud-db-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-xl font-bold text-indigo-700">☁️</span>
+          <div>
+            <h3 class="text-lg font-black text-slate-900">실시간 공유 클라우드 DB 연동 설정</h3>
+            <p class="text-xs text-slate-500">다른 사용자가 자신의 휴대폰이나 컴퓨터에서 체크한 내역을 실시간으로 함께 공유합니다.</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeCloudDbModal()" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">✕</button>
+      </div>
+
+      <!-- Why Cloud DB is needed -->
+      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 space-y-1.5">
+        <div class="font-extrabold text-amber-900 flex items-center gap-1.5">
+          <span>⚠️ 왜 다른 사람이 체크한 게 안 보였을까요?</span>
+        </div>
+        <p class="leading-relaxed">
+          현재 사이트는 <b>GitHub Pages 정적 사이트</b>로 호스팅되어 있어, 클라우드 DB가 연동되지 않으면 <b>각 사용자의 브라우저(로컬)</b>에만 저장됩니다.<br/>
+          따라서 동아리원들이 휴대폰으로 체크한 내역을 관리자님이 한 곳에서 모아보시려면, <b>무료 구글 Firebase 클라우드 DB</b>를 1분 만에 연결하셔야 합니다.
+        </p>
+      </div>
+
+      <!-- Step-by-Step 1-Minute Guide -->
+      <div class="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 text-xs text-slate-700">
+        <div class="font-black text-indigo-950 text-sm">⚡ 1분 만에 무료 클라우드 DB 만들기 가이드</div>
+        <ol class="space-y-2 list-decimal list-inside leading-relaxed text-slate-600">
+          <li>
+            <a href="https://console.firebase.google.com/" target="_blank" class="font-bold text-blue-600 underline">Google Firebase 콘솔 (console.firebase.google.com)</a>에 접속하여 구글 로그인 후 <b>[프로젝트 만들기]</b>를 클릭합니다. (프로젝트 이름: <code class="bg-white px-1 py-0.5 rounded border border-slate-300">gaon-form</code>)
+          </li>
+          <li>
+            프로젝트 생성 후, 왼쪽 메뉴의 <b>[빌드] → [Realtime Database]</b>로 이동하여 <b>[데이터베이스 만들기]</b>를 누릅니다.
+          </li>
+          <li>
+            보안 규칙 단계에서 <b>[테스트 모드로 시작]</b>(읽기/쓰기 true)을 선택하고 [사용 설정]을 누릅니다.
+          </li>
+          <li>
+            화면 상단에 표시되는 <b>데이터베이스 URL</b>(예: <code class="bg-white px-1 py-0.5 rounded border border-slate-300">https://gaon-form-xxxxx-default-rtdb.firebaseio.com</code>)을 복사하여 아래에 붙여넣고 [연결]을 누르면 즉시 연동됩니다!
+          </li>
+        </ol>
+      </div>
+
+      <!-- Input and Action buttons -->
+      <div class="space-y-2">
+        <label class="block text-xs font-extrabold text-slate-800">Firebase Realtime Database URL</label>
+        <div class="flex gap-2">
+          <input
+            id="cloud-db-url-input"
+            type="url"
+            placeholder="https://your-project-default-rtdb.firebaseio.com"
+            class="flex-1 rounded-xl border-2 border-slate-300 px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          />
+          <button
+            type="button"
+            onclick="connectCloudDbFromInput()"
+            class="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-indigo-700 transition">
+            연결 & 전체 동기화
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200 text-xs">
+        <button
+          type="button"
+          onclick="disconnectCloudDb()"
+          class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition">
+          연결 해제 (로컬 모드로 전환)
+        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onclick="uploadCurrentStateToCloudDb()"
+            id="cloud-db-upload-btn"
+            class="hidden rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition">
+            ☁️ 현재 실적 전체 강제 업로드
+          </button>
+          <button
+            type="button"
+            onclick="closeCloudDbModal()"
+            class="rounded-lg bg-slate-200 px-4 py-1.5 font-bold text-slate-700 hover:bg-slate-300 transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: 회원 체크 결과 제출 / 관리자 취합 모달 (오프라인/직접 제출 지원) -->
+  <!-- ========================================================================= -->
+  <div id="submit-share-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+      <div class="flex items-start justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-lg font-bold text-blue-700">📤</span>
+          <div>
+            <h3 class="text-base font-black text-slate-900">내 실적 체크 결과 제출 / 공유</h3>
+            <p class="text-xs text-slate-500">체크한 내역을 관리자에게 직접 전달하거나 백업합니다.</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeSubmitShareModal()" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100">✕</button>
+      </div>
+
+      <div id="submit-share-content" class="text-xs space-y-3"></div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+        <button type="button" onclick="closeSubmitShareModal()" class="rounded-lg bg-slate-200 px-4 py-1.5 text-xs font-bold text-slate-700">닫기</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
