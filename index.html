@@ -63,7 +63,28 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- DB Persistence Badge & Controls -->
+        <div class="flex items-center gap-1.5">
+          <span id="db-status-badge" class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 shadow-2xs">
+            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="db-status-text">💾 DB 저장됨</span>
+          </span>
+          <button
+            type="button"
+            onclick="exportDbBackupJson()"
+            title="현재 DB 상태를 JSON 백업 파일로 다운로드합니다."
+            class="rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+            📥 DB 백업
+          </button>
+          <label
+            title="이전에 백업한 DB JSON 파일을 불러와 복원합니다."
+            class="cursor-pointer rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs">
+            <span>📤 DB 복원</span>
+            <input type="file" accept=".json" class="hidden" onchange="importDbBackupJson(event)" />
+          </label>
+        </div>
+
         <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
           <button
             id="nav-btn-member"
@@ -509,7 +530,117 @@
         .replace(/'/g, '&#39;');
     }
 
+    // =========================================================================
+    // MULTI-TIER PERSISTENT DB ENGINE (IndexedDB + LocalStorage + Server SQLite)
+    // =========================================================================
+    const IDB_NAME = 'GAON_CLUB_DATABASE_V1';
+    const IDB_VERSION = 1;
+    const IDB_STORE = 'app_state';
+    let isServerConnected = false;
+
+    function openIndexedDb() {
+      return new Promise((resolve) => {
+        if (!window.indexedDB) return resolve(null);
+        try {
+          const req = window.indexedDB.open(IDB_NAME, IDB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+              db.createObjectStore(IDB_STORE, { keyPath: 'key' });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+
+    async function saveToIndexedDb(data) {
+      try {
+        const db = await openIndexedDb();
+        if (!db) return false;
+        return new Promise((resolve) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          const store = tx.objectStore(IDB_STORE);
+          store.put({ key: 'current_state', value: data, savedAt: new Date().toISOString() });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        });
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function loadFromIndexedDb() {
+      try {
+        const db = await openIndexedDb();
+        if (!db) return null;
+        return new Promise((resolve) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.get('current_state');
+          req.onsuccess = () => resolve(req.result ? req.result.value : null);
+          req.onerror = () => resolve(null);
+        });
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function updateDbStatusBadge(mode) {
+      const badge = document.getElementById('db-status-badge');
+      const text = document.getElementById('db-status-text');
+      if (!badge || !text) return;
+      const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (mode === 'server') {
+        badge.className = 'inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-900 shadow-2xs';
+        text.innerHTML = `<span class="h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></span> 💾 SQLite 서버 연동됨 <span class="font-mono text-[10px] text-indigo-700">(${timeStr})</span>`;
+      } else {
+        badge.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs';
+        text.innerHTML = `<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 💾 영구 DB 저장됨 <span class="font-mono text-[10px] text-emerald-700">(${timeStr})</span>`;
+      }
+    }
+
+    async function checkServerConnection() {
+      if (!window.location.protocol.startsWith('http')) return false;
+      try {
+        const res = await fetch('/api/health', { cache: 'no-store' });
+        if (res.ok) {
+          isServerConnected = true;
+          updateDbStatusBadge('server');
+          return true;
+        }
+      } catch (e) {}
+      isServerConnected = false;
+      updateDbStatusBadge('local');
+      return false;
+    }
+
+    let serverSaveDebounce = null;
+    function syncSaveToServer(data) {
+      if (!isServerConnected) return;
+      if (serverSaveDebounce) clearTimeout(serverSaveDebounce);
+      serverSaveDebounce = setTimeout(async () => {
+        try {
+          const res = await fetch('/api/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (res.ok) {
+            updateDbStatusBadge('server');
+          }
+        } catch (e) {
+          console.warn('Server sync error:', e);
+          updateDbStatusBadge('local');
+        }
+      }, 300);
+    }
+
     function loadState() {
+      // 1. Synchronous load from localStorage or embedded initial data
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
@@ -537,9 +668,59 @@
         if (state.updateLogs.length > 40) state.updateLogs.length = 40;
       }
       recalcAll();
+
+      // Layer 1: Synchronous localStorage
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) {}
+      } catch (e) {
+        console.warn('localStorage save throttled:', e);
+      }
+
+      // Layer 2: Permanent IndexedDB (Unlimited quota, survives reloads & restarts)
+      saveToIndexedDb(state);
+
+      // Layer 3: Server SQLite sync (if running python server)
+      syncSaveToServer(state);
+
+      updateDbStatusBadge(isServerConnected ? 'server' : 'local');
+    }
+
+    function exportDbBackupJson() {
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const fileName = `gaon_activities_db_backup_${dateStr}.json`;
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`💾 DB 백업 파일(${fileName})이 정상적으로 다운로드되었습니다.`);
+    }
+
+    function importDbBackupJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (!parsed || !Array.isArray(parsed.activities) || parsed.activities.length === 0) {
+            showToast('올바른 가온누리 DB 백업 JSON 파일이 아닙니다.', 'warn');
+            return;
+          }
+          state = parsed;
+          recalcAll();
+          saveState('DB 백업 파일을 성공적으로 불러와 전체 복원했습니다.');
+          renderAfterDataChange();
+          showToast(`✅ DB 복원 완료: 총 ${state.activities.length}건의 실적이 안전하게 복원되었습니다!`);
+        } catch (err) {
+          showToast('JSON 파일을 파싱하는 중 오류가 발생했습니다: ' + err.message, 'warn');
+        }
+      };
+      reader.readAsText(file, 'utf-8');
     }
 
     function isOfficialFixed(act) {
@@ -869,6 +1050,18 @@
         if (val) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
       }
+
+      // Persist searched member in URL hash and localStorage so it NEVER resets on reload!
+      try {
+        if (val) {
+          localStorage.setItem('gaon_active_search_query', val);
+          history.replaceState(null, '', '#member=' + encodeURIComponent(val));
+        } else {
+          localStorage.removeItem('gaon_active_search_query');
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch (e) {}
+
       renderMemberSearchResult();
     }
 
@@ -880,6 +1073,10 @@
       searchedMemberName = '';
       document.getElementById('member-search-input').value = '';
       document.getElementById('member-clear-btn')?.classList.add('hidden');
+      try {
+        localStorage.removeItem('gaon_active_search_query');
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch (e) {}
       renderMemberSearchResult();
     }
 
@@ -1761,6 +1958,14 @@
       }
     }
 
+    function changeFirstSessionDate(actId, val) {
+      updateEndpointDate(actId, 'first', val);
+    }
+
+    function changeLastSessionDate(actId, val) {
+      updateEndpointDate(actId, 'last', val);
+    }
+
     function updateEndpointDate(actId, which, newDate) {
       const act = state.activities.find(a => a.id === actId);
       if (!act || !newDate) return;
@@ -2571,12 +2776,72 @@
     }
 
     function initApp() {
+      // 1. Synchronous initial load from localStorage
       loadState();
-      if (sessionStorage.getItem(ADMIN_AUTH_KEY) === '1') {
-        isAdminAuthed = true;
-        document.getElementById('admin-unlocked-badge').classList.remove('hidden');
+
+      // 2. RESTORE SEARCHED MEMBER SYNCHRONOUSLY! (Zero flicker on refresh)
+      let initQuery = '';
+      try {
+        const hash = (window.location && window.location.hash) || '';
+        if (hash.startsWith('#member=')) {
+          initQuery = decodeURIComponent(hash.slice(8));
+        } else if (hash.startsWith('#search=')) {
+          initQuery = decodeURIComponent(hash.slice(8));
+        } else if (window.location && window.location.search && typeof URLSearchParams !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          initQuery = params.get('member') || params.get('search') || '';
+        }
+        if (!initQuery) {
+          initQuery = localStorage.getItem('gaon_active_search_query') || '';
+        }
+      } catch (e) {}
+
+      if (initQuery) {
+        searchedMemberName = initQuery.trim();
+        const input = document.getElementById('member-search-input');
+        if (input) input.value = searchedMemberName;
+        const clearBtn = document.getElementById('member-clear-btn');
+        if (clearBtn) clearBtn.classList.remove('hidden');
       }
+
+      // Render search result immediately
       renderMemberSearchResult();
+      updateDbStatusBadge('local');
+
+      // 3. Restore Admin Auth if session exists
+      try {
+        if (sessionStorage.getItem(ADMIN_AUTH_KEY) === '1') {
+          isAdminAuthed = true;
+          document.getElementById('admin-unlocked-badge')?.classList.remove('hidden');
+        }
+      } catch (e) {}
+
+      // 4. Background asynchronous load from IndexedDB (survives any browser cache purge)
+      loadFromIndexedDb().then((idbState) => {
+        if (idbState && Array.isArray(idbState.activities) && idbState.activities.length > 0) {
+          const idbHasMod = idbState.activities.some(a => a.user_modified || a.is_gaon_checked);
+          const curHasMod = state.activities.some(a => a.user_modified || a.is_gaon_checked);
+          if (idbHasMod || !curHasMod) {
+            state = idbState;
+            recalcAll();
+            renderAfterDataChange();
+          }
+        }
+      }).catch(() => {});
+
+      // 5. Background check for local SQLite server (python server.py on http://localhost:8000)
+      checkServerConnection().then((hasServer) => {
+        if (hasServer) {
+          fetch('/api/state', { cache: 'no-store' }).then(r => r.json()).then(serverState => {
+            if (serverState && Array.isArray(serverState.activities) && serverState.activities.length > 0) {
+              state = serverState;
+              recalcAll();
+              renderAfterDataChange();
+              updateDbStatusBadge('server');
+            }
+          }).catch(() => {});
+        }
+      }).catch(() => {});
     }
 
     initApp();
