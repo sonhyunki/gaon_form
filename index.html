@@ -614,6 +614,18 @@
       showToast('클라우드 DB 연결이 해제되었습니다 (로컬 모드).');
     }
 
+    let lastKnownCloudSyncVersion = 0;
+    let hasCompletedInitialCloudFetch = false;
+
+    function bumpCloudSyncVersion() {
+      if (!CLOUD_DB_URL) return;
+      fetch(`${normalizeFirebaseUrl(CLOUD_DB_URL)}/last_updated.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ".sv": "timestamp" })
+      }).catch(() => {});
+    }
+
     async function uploadCurrentStateToCloudDb() {
       if (!CLOUD_DB_URL) return;
       showToast('☁️ 현재 548건 전체 실적 데이터를 클라우드 DB에 업로드 중...');
@@ -621,6 +633,10 @@
         const actDict = {};
         state.activities.forEach(a => {
           actDict[a.id] = {
+            id: a.id,
+            title: a.title || '',
+            student_id: a.student_id || '',
+            name: a.name || '',
             is_gaon_checked: Boolean(a.is_gaon_checked),
             meeting_count: a.meeting_count || 1,
             gaon_category: a.gaon_category || '스터디',
@@ -632,6 +648,22 @@
             last_modified_by: a.name || '',
             last_modified_at: a.last_modified_at || new Date().toISOString()
           };
+          if (String(a.id).startsWith('act-')) {
+            Object.assign(actDict[a.id], {
+              grade: a.grade || '1',
+              department: a.department || '',
+              club_group: a.club_group || '',
+              original_section: a.original_section || '',
+              original_kind: a.original_kind || '',
+              activity_type: a.activity_type || '',
+              role: a.role || '',
+              scope: a.scope || '교내',
+              status: a.status || '참가 완료',
+              team_type: a.team_type || '팀',
+              team_size: String(a.gaon_member_count || 2),
+              csv_team_candidate: true
+            });
+          }
         });
 
         const res = await fetch(`${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities.json`, {
@@ -640,7 +672,13 @@
           body: JSON.stringify(actDict)
         });
 
+        if (res.status === 402 || res.status === 429) {
+          updateCloudDbStatusUI(false, 'quota');
+          showToast('⚠️ Firebase 무료 사용 한도를 초과했습니다. (로컬 저장 및 코드 제출 기능은 정상 동작합니다)', 'warn');
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        bumpCloudSyncVersion();
         showToast('🎉 전체 실적이 클라우드 DB로 성공적으로 업로드되었습니다!');
       } catch (e) {
         showToast('클라우드 업로드 실패: ' + e.message, 'warn');
@@ -649,10 +687,43 @@
 
     async function syncFromCloudDb(silent = false) {
       if (!CLOUD_DB_URL) return;
+      // Pause background polling when tab is hidden/minimized to conserve Firebase free bandwidth (90%+ saved)
+      if (silent && typeof document !== 'undefined' && document.hidden) return;
+
       try {
-        const res = await fetch(`${normalizeFirebaseUrl(CLOUD_DB_URL)}/activities.json`, { cache: 'no-store' });
+        const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
+
+        // Step 1: Ultra-lightweight version check (~15 bytes) before downloading 550KB payload
+        let latestRemoteVer = 0;
+        try {
+          const verRes = await fetch(`${baseUrl}/last_updated.json`, { cache: 'no-store' });
+          if (verRes.status === 402 || verRes.status === 429) {
+            updateCloudDbStatusUI(false, 'quota');
+            if (!silent) showToast('⚠️ Firebase 무료 트래픽 한도가 일시 초과되었습니다. (로컬 저장 및 제출 코드 기능은 정상 작동)', 'warn');
+            return;
+          }
+          if (verRes.ok) {
+            const rawVer = await verRes.json();
+            latestRemoteVer = (typeof rawVer === 'object' && rawVer !== null) ? Number(rawVer.ts || 0) : Number(rawVer || 0);
+          }
+        } catch (e) {}
+
+        if (silent && hasCompletedInitialCloudFetch && latestRemoteVer <= lastKnownCloudSyncVersion) {
+          updateCloudDbStatusUI(true);
+          return; // No changes since last sync! Saved ~550KB bandwidth!
+        }
+
+        // Step 2: Fetch full activities only on first load, manual sync, or when version changed
+        const res = await fetch(`${baseUrl}/activities.json`, { cache: 'no-store' });
+        if (res.status === 402 || res.status === 429) {
+          updateCloudDbStatusUI(false, 'quota');
+          if (!silent) showToast('⚠️ Firebase 무료 트래픽 한도가 일시 초과되었습니다. (로컬 저장 및 제출 코드 기능은 정상 작동)', 'warn');
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const remoteActs = await res.json();
+        hasCompletedInitialCloudFetch = true;
+        lastKnownCloudSyncVersion = Math.max(1, latestRemoteVer, lastKnownCloudSyncVersion);
         if (!remoteActs) return;
 
         let changed = false;
@@ -738,7 +809,7 @@
         last_modified_by: act.name || '',
         last_modified_at: act.last_modified_at
       };
-      if (act.id.startsWith('act-')) {
+      if (String(act.id).startsWith('act-')) {
         Object.assign(payload, {
           title: act.title || '',
           student_id: act.student_id || '',
@@ -764,9 +835,13 @@
       }).then(res => {
         if (res.ok) {
           updateCloudDbStatusUI(true);
+          bumpCloudSyncVersion();
         } else if (res.status === 401) {
           updateCloudDbStatusUI(false, '401');
           showToast('⚠️ Firebase 보안 규칙(Rules)이 잠금 모드입니다. 규칙에서 read, write를 true로 설정해야 다른 사용자와 공유됩니다.', 'warn');
+        } else if (res.status === 402 || res.status === 429) {
+          updateCloudDbStatusUI(false, 'quota');
+          showToast('⚠️ Firebase 무료 한도 초과 — 로컬에는 안전하게 저장되었습니다. 상단 [제출 코드 복사]를 활용해 주세요.', 'warn');
         }
       }).catch(err => {
         console.warn('Single activity cloud sync failed:', err);
@@ -780,22 +855,34 @@
 
       if (connected && CLOUD_DB_URL) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition';
-        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (모든 사용자 실시간 공유)';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (저전력·초경량 공유 모드)';
       } else if (errorMsg && String(errorMsg).includes('401')) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 보안 규칙(Rules) 설정 필요 (클릭)';
+      } else if (errorMsg && String(errorMsg).includes('quota')) {
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 무료 한도 초과 (로컬 자동저장 작동중)';
       } else {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-2xs hover:bg-rose-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> 🔴 로컬 전용 (클라우드 DB 미연동 - 클릭하여 설정)';
       }
     }
 
-    // Auto-poll cloud DB every 10 seconds for real-time synchronization
+    // Sync immediately when user returns to browser tab
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && CLOUD_DB_URL) {
+          syncFromCloudDb(true);
+        }
+      });
+    }
+
+    // Auto-poll cloud DB every 15 seconds with ~15-byte ultra-lightweight check
     setInterval(() => {
       if (CLOUD_DB_URL) {
         syncFromCloudDb(true);
       }
-    }, 10000);
+    }, 15000);
 
     // =========================================================================
     // MEMBER EXPORT & ADMIN MERGE (Offline / Direct Sharing Support)
