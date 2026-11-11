@@ -122,59 +122,24 @@
     <!-- ===================================================================== -->
     <section id="mode-member" class="space-y-6">
       <div class="mx-auto max-w-4xl rounded-2xl border border-blue-100 bg-gradient-to-br from-white via-white to-blue-50/60 p-5 shadow-sm sm:p-7">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-100/80 px-3 py-1 text-xs font-bold text-blue-800">
-            👤 일반 회원 전용 — 본인 이름 검색
-          </span>
-          <label class="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-blue-500 hover:text-blue-600">
-            <span>📂 다른 CSV 파일 불러오기</span>
-            <input type="file" accept=".csv" class="hidden" onchange="handleCustomCsvUpload(event)" />
-          </label>
-        </div>
-
-        <h2 class="mt-2.5 text-xl font-extrabold text-slate-900 sm:text-2xl">
-          본인의 이름을 검색하여 가온누리 실적 체크 및 모임 회차를 설정하세요
+        <h2 class="text-xl font-extrabold text-slate-900 sm:text-2xl">
+          가온누리 실적 체크 및 모임 회차 입력
         </h2>
-        <div class="mt-2 rounded-xl border border-blue-200/80 bg-blue-50/60 px-4 py-3 text-xs sm:text-sm text-slate-700 space-y-2">
-          <div class="flex items-start gap-2">
-            <span class="rounded bg-indigo-600 px-2 py-0.5 text-[11px] font-black text-white shrink-0 mt-0.5">최상단</span>
-            <div><b class="text-indigo-950">🏛️ 동아리 공식 정기 활동:</b> 동아리에서 공식 운영한 스터디 & 세미나는 관리자가 사전 등록해두어 <b>최상단에 기본 실적으로 자동 인정</b>되어 있습니다. (총회/세미나는 1회 고정, 스터디는 필요 시 실제 참석 회차 조절 가능)</div>
-          </div>
-          <div class="flex items-start gap-2">
-            <span class="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white shrink-0 mt-0.5">하단</span>
-            <div><b class="text-blue-950">📋 내가 제출한 실적 확인:</b> 회원님이 직접 제출하신 대회·프로젝트 중 <b>우리 동아리 회원이 본인 포함 최소 2명 이상 참여</b>한 활동에 체크(☑)하고 모임 회차와 일정을 설정해 주세요.</div>
-          </div>
-          <div class="flex items-start gap-2 text-amber-900 pt-1.5 border-t border-blue-200/70">
-            <span class="rounded bg-amber-600 px-2 py-0.5 text-[11px] font-black text-white shrink-0 mt-0.5">평가기간</span>
-            <div><b>📅 평가대상 기간:</b> <b>2025. 11. 1. ~ 2026. 10. 31.</b> (이 기간 외 날짜가 지정되면 안내 피드백이 표시됩니다)</div>
+        <div class="mt-2.5 rounded-xl border border-blue-200/80 bg-blue-50/60 px-4 py-3 text-xs sm:text-sm text-slate-700 space-y-1.5">
+          <div>• <b>공식 정기 활동(상단):</b> 동아리 세미나·정기 스터디는 이미 기본 실적으로 등록되어 있습니다.</div>
+          <div>• <b>내가 제출한 실적(하단):</b> 본인 포함 <b>동아리원 2명 이상</b> 참여한 활동에 <b>체크(☑)</b>하고 회차를 입력한 뒤 <b>[저장하기]</b>를 눌러주세요.</div>
+          <div class="text-amber-900 pt-1 border-t border-blue-200/70">
+            • <b>평가 대상 기간:</b> <b>2025. 11. 1. ~ 2026. 10. 31.</b>
           </div>
         </div>
 
-        <!-- 3-Step Cost-Minimized Architecture Banner -->
-        <div class="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 text-xs text-emerald-950 space-y-1">
-          <div class="font-black text-emerald-900 flex items-center gap-1.5">
-            <span>⚡ DB 비용 최소화 3단계 설계 적용됨 (회원당 읽기 1회 · 쓰기 1회 제한)</span>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
-            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
-              <b class="text-emerald-800">1️⃣ 엔터 키 기반 단일 조회:</b> 이름 타이핑 완료 후 <b>Enter</b>를 쳤을 때만 단 1회 조회 쿼리 발생
-            </div>
-            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
-              <b class="text-emerald-800">2️⃣ 번호 배열 쉼표 입력:</b> 체크박스 대신 번호(예: <code class="font-mono font-bold">1, 3, 5</code>)를 입력받아 <b>메모리에만 임시 캐싱</b> (DB 호출 0회)
-            </div>
-            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
-              <b class="text-emerald-800">3️⃣ 트랜잭션 일괄 쓰기:</b> 마지막 확인(<b>Y/n</b>) 후 선택된 실적을 <b>Batch Write로 묶어 단 1회 DB 쓰기</b>만 발생
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-4 flex flex-wrap items-center gap-2">
+        <div class="mt-5 flex flex-wrap items-center gap-2">
           <div class="relative flex-1 min-w-[240px]">
             <input
               id="member-search-input"
               type="text"
               onkeydown="if(event.key==='Enter'){ event.preventDefault(); triggerMemberSearch(); }"
-              placeholder="본인의 이름 또는 학번을 타이핑한 후 [Enter(엔터)] 키를 치세요 (단일 조회)"
+              placeholder="본인의 이름 또는 학번을 입력하고 조회를 누르세요 (예: 손현기, 김민경...)"
               class="w-full rounded-xl border-2 border-slate-300 bg-white pl-10 pr-4 py-3 text-base font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
             />
             <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
@@ -182,7 +147,7 @@
           <button
             onclick="triggerMemberSearch()"
             class="rounded-xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-sm hover:bg-blue-700 transition">
-            ↵ 엔터(Enter) 단일 조회
+            조회하기
           </button>
           <button
             id="member-clear-btn"
@@ -726,7 +691,7 @@
         updateCloudDbStatusUI(true);
 
         closeCloudDbModal();
-        showToast('🎉 클라우드 DB 연결 완료! (수동 조회 · 수동 저장 초절약 모드)');
+        showToast('🎉 서버 연결이 완료되었습니다.');
       } catch (err) {
         alert(`클라우드 DB 연결에 실패했습니다.\n사유: ${err.message}\n\nFirebase 보안 규칙에서 '테스트 모드(read, write: true)'로 설정되었는지 확인해 주세요.`);
       }
@@ -975,11 +940,8 @@
       }
     }
 
-    function saveMemberToCloud(studentId, skipConfirm = false) {
-      if (skipConfirm) {
-        return executeBatchWriteToCloud(studentId);
-      }
-      openBatchWriteConfirmModal(studentId);
+    function saveMemberToCloud(studentId) {
+      return executeBatchWriteToCloud(studentId);
     }
 
     // Executes the actual single transaction/batch write to Firebase (1 DB write only!)
@@ -1024,7 +986,7 @@
           savedMemberIds.add(studentId);
           updateCloudDbStatusUI(true);
           renderAfterDataChange();
-          showToast(`🎉 '${memberName}' 회원의 실적 내역이 서버(클라우드 DB)에 최종 저장되었습니다!`);
+          showToast(`✅ ${memberName}님의 실적이 저장되었습니다!`);
         } else if (res.status === 401) {
           updateCloudDbStatusUI(false, '401');
           showToast('⚠️ Firebase 보안 규칙(Rules)이 잠금 모드입니다.', 'warn');
@@ -1114,7 +1076,7 @@
 
       if (connected && CLOUD_DB_URL) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition';
-        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500"></span> 🟢 클라우드 DB 연결됨 (조회·저장 버튼 수동 전송 모드)';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500"></span> 🟢 서버 연결됨';
       } else if (errorMsg && String(errorMsg).includes('401')) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 보안 규칙(Rules) 설정 필요 (클릭)';
@@ -1917,7 +1879,7 @@
                   type="button"
                   onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
                   class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 ring-4 ring-amber-300/50 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-4 py-2 text-xs sm:text-sm font-black transition shadow-md">
-                  ${unsavedMemberIds.has(m.student_id) ? '💾 변경사항 저장하기 (필수!)' : savedMemberIds.has(m.student_id) ? '✅ 저장 완료 (💾 다시 저장)' : '💾 체크 완료 후 저장하기'}
+                  ${unsavedMemberIds.has(m.student_id) ? '💾 저장하기' : savedMemberIds.has(m.student_id) ? '✅ 저장됨' : '💾 저장하기'}
                 </button>
                 <button
                   type="button"
@@ -1932,18 +1894,18 @@
               <div class="bg-amber-50 border-b-2 border-amber-300 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-2 text-amber-950 text-xs sm:text-sm font-extrabold">
                   <span class="text-base">⚠️</span>
-                  <span>체크·회차 변경사항이 아직 서버에 저장되지 않았습니다! 모든 체크를 마친 후 우측 <b>[💾 저장하기]</b> 버튼을 꼭 눌러주세요.</span>
+                  <span>체크와 회차 설정을 모두 마치셨다면 우측 <b>[저장하기]</b> 버튼을 꼭 눌러주세요!</span>
                 </div>
                 <button
                   type="button"
                   onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
                   class="rounded-xl bg-emerald-600 px-5 py-2 text-xs sm:text-sm font-black text-white hover:bg-emerald-700 transition shadow-sm shrink-0">
-                  💾 지금 서버에 저장하기
+                  💾 저장하기
                 </button>
               </div>
             ` : savedMemberIds.has(m.student_id) ? `
               <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm font-extrabold text-emerald-900">
-                <span>✅ 서버(클라우드 DB)에 안전하게 저장되었습니다! 추가로 수정한 경우에만 다시 [저장하기]를 눌러주세요.</span>
+                <span>✅ 저장이 완료되었습니다!</span>
               </div>
             ` : ''}
 
@@ -2109,46 +2071,14 @@
                     </div>
                   </div>
 
-                  <!-- STEP 2: 번호 배열 쉼표 입력 (체크박스 대체 · 메모리 임시 캐싱) -->
-                  <div class="mt-3.5 rounded-2xl border-2 border-blue-600 bg-blue-50/70 p-4 text-xs text-slate-800 space-y-3 shadow-xs">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex items-center gap-2">
-                        <span class="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-black text-white">STEP 2 · 번호 배열 입력 (메모리 캐싱)</span>
-                        <b class="text-blue-950 text-xs sm:text-sm font-extrabold">체크박스 대신 인정받을 실적 번호를 쉼표(,)로 입력해 메모리에 임시 저장하세요</b>
-                      </div>
-                      <span class="rounded-full bg-white border border-blue-300 px-3 py-1 text-xs font-black text-blue-800">
-                        메모리 캐싱된 번호: ${
-                          userActs.map((a, i) => a.is_gaon_checked ? (i + 1) + '번' : null).filter(Boolean).join(', ') || '없음 (0건)'
-                        }
-                      </span>
+                  <!-- Simple Instruction Box -->
+                  <div class="mt-3.5 rounded-xl border border-blue-200 bg-white p-3.5 text-xs text-slate-700 space-y-1">
+                    <div>
+                      <b class="text-blue-900 font-extrabold">📌 체크 기준:</b>
+                      우리 동아리 회원이 본인 포함 <b>최소 2명 이상 함께 참여한 활동</b>에만 체크(☑)해 주세요.
                     </div>
-
-                    <div class="text-[11px] sm:text-xs text-slate-600 leading-relaxed">
-                      • 아래 제출 실적 목록(<b>#1번 ~ #${userActs.length}번</b>) 중 <b>본인 포함 우리 동아리원이 2명 이상 함께 참여한 실적 번호</b>를 쉼표로 구분해 입력한 뒤 <b>Enter</b>(또는 캐싱 적용 버튼)를 누르세요.<br/>
-                      • 이 단계에서는 <b>DB 쓰기가 전혀 발생하지 않으며(0회)</b> 브라우저 메모리에만 캐싱됩니다. (전체 해제 시 <code class="bg-white px-1 rounded border">0</code> 입력)
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                      <input
-                        id="batch-number-input-${escapeHtml(m.student_id)}"
-                        type="text"
-                        value="${escapeHtml(userActs.map((a, i) => a.is_gaon_checked ? (i + 1) : null).filter(Boolean).join(', '))}"
-                        onkeydown="if(event.key==='Enter'){ event.preventDefault(); applyBatchNumberSelection('${escapeHtml(m.student_id)}'); }"
-                        placeholder="예: 1, 2, 4 (인정받을 실적 번호를 쉼표로 입력 후 Enter)"
-                        class="flex-1 min-w-[240px] rounded-xl border-2 border-blue-500 bg-white px-4 py-2.5 font-mono text-sm sm:text-base font-black text-slate-900 outline-none focus:border-blue-700 focus:ring-4 focus:ring-blue-100"
-                      />
-                      <button
-                        type="button"
-                        onclick="applyBatchNumberSelection('${escapeHtml(m.student_id)}')"
-                        class="rounded-xl bg-blue-600 px-5 py-2.5 text-xs sm:text-sm font-black text-white hover:bg-blue-700 transition shadow-sm shrink-0">
-                        📥 번호 배열 메모리 캐싱 (Enter)
-                      </button>
-                      <button
-                        type="button"
-                        onclick="selectAllTeamCandidatesInMemory('${escapeHtml(m.student_id)}')"
-                        class="rounded-xl border border-blue-300 bg-white px-3.5 py-2.5 text-xs font-bold text-blue-800 hover:bg-blue-100 transition shrink-0">
-                        ⚡ 팀 감지 번호 자동입력
-                      </button>
+                    <div class="text-[11px] text-slate-500">
+                      체크와 회차 입력을 모두 마치신 뒤 맨 아래 <b>[저장하기]</b> 버튼을 눌러주세요.
                     </div>
                   </div>
                 </div>
@@ -2176,30 +2106,22 @@
                 `}
               </div>
 
-              <!-- Sticky Bottom Final Save Bar -->
+              <!-- Sticky Bottom Save Bar -->
               <div class="sticky bottom-3 z-30 mt-6 rounded-2xl border-2 ${unsavedMemberIds.has(m.student_id) ? 'border-amber-400 bg-slate-900/95 ring-4 ring-amber-400/30' : 'border-emerald-500/40 bg-slate-900/95'} p-4 text-white shadow-xl backdrop-blur-xs flex flex-wrap items-center justify-between gap-3">
                 <div class="text-xs sm:text-sm">
                   ${unsavedMemberIds.has(m.student_id)
-                    ? `<span class="font-black text-amber-300">⚠️ 아직 저장되지 않은 변경사항이 있습니다!</span> <span class="text-slate-200">체크와 회차 입력을 마쳤다면 우측 <b>[저장하기]</b> 버튼을 꼭 눌러주세요.</span>`
+                    ? `<span class="font-black text-amber-300">⚠️ 아직 저장되지 않았습니다!</span> <span class="text-slate-200">체크를 마쳤다면 <b>[저장하기]</b>를 눌러주세요.</span>`
                     : savedMemberIds.has(m.student_id)
-                      ? `<span class="font-black text-emerald-400">✅ 서버(클라우드 DB)에 최종 저장이 완료되었습니다!</span> <span class="text-slate-300">(총 인정: ${m.ssp_total_count}건 · ${m.ssp_meetings}회차)</span>`
-                      : `<span class="font-bold text-slate-200">체크와 회차 설정을 모두 마친 뒤 우측 <b>[💾 최종 저장하기]</b> 버튼을 눌러주세요.</span>`
+                      ? `<span class="font-black text-emerald-400">✅ 저장 완료!</span> <span class="text-slate-300">(총 ${m.ssp_total_count}건 · ${m.ssp_meetings}회차)</span>`
+                      : `<span class="font-bold text-slate-200">체크와 회차 입력 후 <b>[저장하기]</b> 버튼을 눌러주세요.</span>`
                   }
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onclick="openMemberSubmitModal('${escapeHtml(m.student_id)}')"
-                    class="rounded-xl border border-slate-600 bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition">
-                    📋 코드 복사(비상용)
-                  </button>
-                  <button
-                    type="button"
-                    onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
-                    class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-6 py-2.5 text-sm sm:text-base font-black transition shadow-md">
-                    ${unsavedMemberIds.has(m.student_id) ? '💾 STEP 3. 확인(Y/n) 후 일괄 쓰기 (Batch Write)' : savedMemberIds.has(m.student_id) ? '✅ Batch Write 완료 (다시 저장)' : '💾 STEP 3. 확인(Y/n) 후 일괄 쓰기 (Batch Write)'}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
+                  class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-7 py-2.5 text-sm sm:text-base font-black transition shadow-md shrink-0">
+                  ${unsavedMemberIds.has(m.student_id) ? '💾 저장하기' : savedMemberIds.has(m.student_id) ? '✅ 저장 완료 (다시 저장)' : '💾 저장하기'}
+                </button>
               </div>
 
             </div>
@@ -2531,53 +2453,54 @@
                 </div>
               </div>
 
-              <!-- 번호 배열 캐싱 상태 표시 (체크박스 대신 상단 번호 배열 입력으로 제어) -->
+              <!-- 가온누리 실적 체크박스 -->
               <div class="mt-4 pt-3 border-t border-slate-200/80">
-                <div
-                  class="flex items-center justify-between gap-3 rounded-xl border-2 p-3.5 ${
+                <label
+                  class="flex items-start gap-3 rounded-xl border-2 p-3.5 cursor-pointer transition select-none ${
                     isChecked
                       ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                      : 'border-slate-300 bg-white text-slate-800'
+                      : 'border-slate-300 bg-white hover:border-blue-500 hover:bg-blue-50/40 text-slate-900'
                   }">
-                  <div class="flex items-center gap-2.5">
-                    <span class="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm font-black shrink-0 ${
-                      isChecked ? 'bg-white text-blue-700' : 'bg-slate-900 text-white'
-                    }">
-                      #${indexNo}
-                    </span>
-                    <div class="text-left">
-                      <div class="text-xs sm:text-sm font-extrabold leading-snug">
-                        ${isChecked
-                          ? `✅ [${indexNo}번] 메모리 캐싱 선택됨 (Batch Write 대상)`
-                          : `⬜ [${indexNo}번] 미선택 (상단 번호 입력창에 '${indexNo}' 입력)`}
-                      </div>
-                      <div class="mt-0.5 text-[11px] ${isChecked ? 'text-blue-100' : 'text-slate-500'}">
-                        ${isChecked
-                          ? '우측에서 실적 구분과 모임 회차·일정을 확인한 뒤 하단 [일괄 쓰기]를 진행하세요.'
-                          : '인정받을 실적이라면 상단 번호 배열 입력창에 번호를 쉼표(,)로 입력해 주세요.'}
-                      </div>
+                  <input
+                    type="checkbox"
+                    ${isChecked ? 'checked' : ''}
+                    onchange="toggleGaonValid('${act.id}', this.checked)"
+                    class="mt-0.5 h-5 w-5 rounded accent-white cursor-pointer shrink-0"
+                  />
+                  <div class="flex-1 text-left">
+                    <div class="text-xs sm:text-sm font-extrabold leading-snug">
+                      ${isChecked
+                        ? '✅ 가온누리 실적 인정 체크됨'
+                        : '가온누리 실적으로 체크하기 (동아리원 2명 이상)'}
+                    </div>
+                    <div class="mt-0.5 text-[11px] ${isChecked ? 'text-blue-100' : 'text-slate-500'}">
+                      ${isChecked
+                        ? '우측에서 구분·모임 회차·날짜를 확인해 주세요.'
+                        : '본인 포함 우리 동아리원 2명 이상이 함께한 활동이라면 체크하세요.'}
                     </div>
                   </div>
-                </div>
+                </label>
               </div>
             </div>
 
-            <!-- RIGHT (7 cols): 메모리에 캐싱된 번호만 회차/날짜 설정 활성화 -->
+            <!-- RIGHT (7 cols): 체크한 뒤 회차/날짜 설정 -->
             <div class="lg:col-span-7 p-4 sm:p-5 bg-white flex flex-col justify-center">
               ${!isChecked ? `
-                <!-- UNSELECTED STATE: Controlled via Batch Number Input -->
-                <div class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-6 text-center space-y-2 my-auto">
-                  <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200/80 font-mono text-sm font-black text-slate-700">
-                    #${indexNo}
-                  </div>
+                <div class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-6 text-center space-y-3 my-auto">
                   <div class="space-y-1 max-w-md">
                     <div class="text-sm font-extrabold text-slate-800">
-                      상단 [STEP 2 · 번호 배열 입력창]에 <code class="text-blue-600 font-mono">${indexNo}</code>번을 입력하면 활성화됩니다
+                      먼저 실적으로 체크해 주세요
                     </div>
                     <p class="text-xs text-slate-500 leading-relaxed">
-                      개별 체크박스 대신 상단 입력창에 번호를 쉼표로 입력(예: <b>1, 2, 4</b>)하여 메모리에 임시 캐싱한 뒤, 마지막 확인(Y/n)을 거쳐 일괄 저장합니다.
+                      본인 포함 우리 동아리원이 <b>2명 이상</b> 참여한 활동이라면 아래 버튼을 눌러 회차를 입력할 수 있습니다.
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onclick="toggleGaonValid('${act.id}', true)"
+                    class="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-xs hover:bg-blue-700 transition">
+                    ☑ 가온누리 실적으로 체크하기
+                  </button>
                 </div>
               ` : `
                 <!-- CHECKED STATE: Unlocked! Configure Category, Club Member Count, Total Sessions & Dates -->
@@ -2710,7 +2633,7 @@
         if (evalSt.hasWarning) {
           showToast(`⚠️ '${act.title}' 체크 완료 — 단, 평가대상 기간(2025.11.01~2026.10.31) 외 날짜(${act.session_schedule_text})가 포함되어 있습니다!`, 'warn');
         } else {
-          showToast(`✅ '${act.title}' — 가온누리 실적으로 체크되었습니다. 이제 회차를 설정하세요!`);
+          showToast(`☑ '${act.title}' 체크됨 (완료 후 저장하기를 눌러주세요)`);
         }
       } else {
         saveState(`${act.name}(${act.student_id}) 회원이 '${act.title}' 실적의 가온누리 실적 체크를 해제했습니다.`);
@@ -2744,7 +2667,7 @@
       saveState(`${act.name}(${act.student_id}) 회원이 '${act.title}' 참여 동아리원 수를 본인 포함 ${c}명으로 설정했습니다.`);
       renderAfterDataChange();
       syncActivityToCloud(act);
-      showToast(`참여 동아리원 수가 본인 포함 ${c}명으로 저장되었습니다.`);
+      showToast(`참여 인원 ${c}명 적용됨`);
     }
 
     function changeTotalSessionCount(actId, newCount) {
@@ -2776,7 +2699,7 @@
       if (evalStCnt.hasWarning) {
         showToast(`⚠️ 총 ${cnt}회차 저장됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있으니 날짜를 확인해 주세요.`, 'warn');
       } else {
-        showToast(`${act.title} — 총 ${cnt}회차로 저장되었습니다.`);
+        showToast(`${act.title} — ${cnt}회차 적용됨`);
       }
     }
 
@@ -2815,7 +2738,7 @@
       if (evalSt.hasWarning) {
         showToast(`⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 경고: ${evalSt.reasons[0]}`, 'warn');
       } else {
-        showToast(`${act.title} — ${labelStr} 날짜(${newDate})가 저장되었습니다.`);
+        showToast(`${act.title} — 날짜 변경됨`);
       }
     }
 
@@ -3813,54 +3736,6 @@
 
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
         <button type="button" onclick="closeSubmitShareModal()" class="rounded-lg bg-slate-200 px-4 py-1.5 text-xs font-bold text-slate-700">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========================================================================= -->
-  <!-- MODAL: STEP 3 트랜잭션 기반 일괄 쓰기 (Batch Write) 마지막 확인 (Y/n) -->
-  <!-- ========================================================================= -->
-  <div id="batch-write-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
-      <div class="flex items-start justify-between border-b border-slate-200 pb-3">
-        <div class="flex items-center gap-2.5">
-          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-xl font-bold text-emerald-700">💾</span>
-          <div>
-            <h3 class="text-base font-black text-slate-900">STEP 3 · 트랜잭션 기반 일괄 쓰기 (Batch Write) 확인</h3>
-            <p class="text-xs text-slate-500">메모리에 캐싱된 실적을 단 1회의 DB 쓰기로 일괄 저장합니다.</p>
-          </div>
-        </div>
-        <button type="button" onclick="closeBatchWriteConfirmModal()" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100">✕</button>
-      </div>
-
-      <div id="batch-confirm-summary-body" class="space-y-3"></div>
-
-      <div class="rounded-xl border-2 border-slate-900 bg-slate-50 p-3.5 space-y-2">
-        <label class="block text-xs font-black text-slate-900">
-          ⌨️ 마지막 확인 (Y/n): 위 내역을 Batch Write로 일괄 저장하시겠습니까?
-        </label>
-        <div class="flex items-center gap-2">
-          <input
-            id="batch-confirm-yn-input"
-            type="text"
-            maxlength="3"
-            onkeydown="handleBatchConfirmYnInputKey(event)"
-            placeholder="Y 또는 n 입력 후 Enter"
-            class="w-44 rounded-xl border-2 border-slate-400 bg-white px-3.5 py-2 font-mono text-sm font-black text-slate-900 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
-          />
-          <button
-            type="button"
-            onclick="submitBatchConfirmYn('y')"
-            class="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-black text-white hover:bg-emerald-700 transition shadow-sm">
-            [Y] 확인 · Batch Write 실행 (DB 쓰기 1회)
-          </button>
-          <button
-            type="button"
-            onclick="submitBatchConfirmYn('n')"
-            class="rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
-            [n] 취소
-          </button>
-        </div>
       </div>
     </div>
   </div>
