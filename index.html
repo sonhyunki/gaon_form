@@ -44,12 +44,15 @@
           G
         </div>
         <div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <h1 class="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
               가온누리(GAON) 실적 인정 체크 & 모임 회차 관리
             </h1>
             <span class="hidden rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-200 sm:inline-block">
               본인 포함 동아리원 2명 이상 기준
+            </span>
+            <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-extrabold text-amber-800 border border-amber-300">
+              📅 평가대상 기간: 2025.11.01 ~ 2026.10.31
             </span>
           </div>
           <p class="text-xs text-slate-500">
@@ -78,8 +81,8 @@
   </header>
 
   <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-    <span class="text-emerald-400">✔</span>
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden max-w-md items-center gap-2.5 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl border border-slate-700">
+    <span id="toast-icon" class="text-emerald-400 shrink-0">✔</span>
     <span id="toast-msg">저장되었습니다.</span>
   </div>
 
@@ -106,6 +109,7 @@
         <div class="mt-2 rounded-xl border border-blue-200/80 bg-blue-50/60 px-4 py-3 text-xs sm:text-sm text-slate-700 space-y-1">
           <div><b class="text-blue-800">STEP 1. 가온누리 실적 체크:</b> 조회된 내 실적 중 <b>우리 동아리 인원이 본인 포함 최소 2명 이상 참여</b>한 실적에 체크(☑)해 주세요.</div>
           <div><b class="text-blue-800">STEP 2. 모임 회차 및 날짜 설정:</b> 체크하는 즉시 우측 입력칸이 열리며, <b>[스터디 / 세미나 / 프로젝트] 구분</b>과 <b>총 몇 회차 모임</b>을 가졌는지, 그리고 <b>1회차·마지막 회차 날짜</b>를 설정할 수 있습니다.</div>
+          <div><b class="text-amber-800">📅 평가대상 기간 안내:</b> <b>2025. 11. 1. ~ 2026. 10. 31.</b> 기간 내 활동만 평가 대상이며, 이 기간 외의 날짜가 지정되면 즉시 안내 피드백이 표시됩니다.</div>
         </div>
 
         <div class="mt-5 flex flex-wrap items-center gap-2">
@@ -276,6 +280,9 @@
               <button onclick="setAdminMemberFilter('3plus')" id="amf-3plus" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
                 ★ 3건 이상 인정 회원
               </button>
+              <button onclick="setAdminMemberFilter('out_of_period')" id="amf-out_of_period" class="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+                ⚠️ 평가기간 외 날짜 포함
+              </button>
             </div>
 
             <div class="flex flex-wrap items-center gap-3">
@@ -344,20 +351,21 @@
         </div>
 
         <div class="col-span-2 rounded-xl border border-blue-200 bg-blue-50/40 p-3.5 space-y-3">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-1">
             <span class="text-xs font-extrabold text-blue-900">📅 1회차 & 마지막 회차 모임 날짜 입력</span>
-            <span class="text-[11px] text-blue-700">시작 회차와 마지막 회차 일자만 입력하세요</span>
+            <span class="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-900">평가기간: 2025.11.01 ~ 2026.10.31</span>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="rounded-lg border border-slate-200 bg-white p-2.5">
+            <div id="new-act-first-date-box" class="rounded-lg border border-slate-200 bg-white p-2.5">
               <label class="block text-xs font-extrabold text-slate-700 mb-1">1회차 (첫 모임 날짜)</label>
-              <input id="new-act-first-date" type="date" value="2026-09-01" class="w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs font-semibold tabular-nums outline-none focus:border-blue-600" />
+              <input id="new-act-first-date" type="date" value="2026-09-01" oninput="validateNewActModalDates()" onchange="validateNewActModalDates()" class="w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs font-semibold tabular-nums outline-none focus:border-blue-600" />
             </div>
             <div id="new-act-last-date-wrap" class="rounded-lg border border-slate-200 bg-white p-2.5">
               <label id="new-act-last-date-label" class="block text-xs font-extrabold text-blue-700 mb-1">마지막 회차 (4회차 날짜)</label>
-              <input id="new-act-last-date" type="date" value="2026-10-20" class="w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs font-semibold tabular-nums outline-none focus:border-blue-600" />
+              <input id="new-act-last-date" type="date" value="2026-10-20" oninput="validateNewActModalDates()" onchange="validateNewActModalDates()" class="w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs font-semibold tabular-nums outline-none focus:border-blue-600" />
             </div>
           </div>
+          <div id="new-act-date-feedback" class="hidden rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800"></div>
         </div>
       </div>
 
@@ -377,6 +385,57 @@
     const STORAGE_KEY = 'gaon_club_homepage_db_v11_eval_period';
     const ADMIN_AUTH_KEY = 'gaon_club_admin_authed_v6';
     const ADMIN_PASSWORD = 'gaon_form_0204';
+    const EVAL_PERIOD_START = '2025-11-01';
+    const EVAL_PERIOD_END = '2026-10-31';
+
+    function isDateInEvalPeriod(dateStr) {
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+      return dateStr >= EVAL_PERIOD_START && dateStr <= EVAL_PERIOD_END;
+    }
+
+    function getEvalPeriodStatus(act) {
+      const cnt = Math.max(1, Number(act.meeting_count) || 1);
+      const f = act.first_session_date || '';
+      const l = cnt === 1 ? f : (act.last_session_date || '');
+
+      const fBefore = Boolean(f && f < EVAL_PERIOD_START);
+      const fAfter = Boolean(f && f > EVAL_PERIOD_END);
+      const fOut = !isDateInEvalPeriod(f);
+
+      const lBefore = cnt > 1 && Boolean(l && l < EVAL_PERIOD_START);
+      const lAfter = cnt > 1 && Boolean(l && l > EVAL_PERIOD_END);
+      const lOut = cnt > 1 && !isDateInEvalPeriod(l);
+
+      const reversedOrder = Boolean(cnt > 1 && f && l && l < f);
+
+      const reasons = [];
+      if (fBefore) reasons.push(`1회차 날짜(${f})가 평가대상 시작일(2025-11-01) 이전입니다.`);
+      else if (fAfter) reasons.push(`1회차 날짜(${f})가 평가대상 종료일(2026-10-31) 이후입니다.`);
+      else if (!f) reasons.push('1회차 날짜가 비어 있습니다.');
+
+      if (lBefore) reasons.push(`마지막 ${cnt}회차 날짜(${l})가 평가대상 시작일(2025-11-01) 이전입니다.`);
+      else if (lAfter) reasons.push(`마지막 ${cnt}회차 날짜(${l})가 평가대상 종료일(2026-10-31) 이후입니다.`);
+      else if (cnt > 1 && !l) reasons.push('마지막 회차 날짜가 비어 있습니다.');
+
+      if (reversedOrder) {
+        reasons.push(`마지막 회차 날짜(${l})가 1회차 날짜(${f})보다 빠릅니다.`);
+      }
+
+      const outOfRange = fOut || lOut;
+      const hasWarning = outOfRange || reversedOrder;
+      return {
+        fOut,
+        lOut,
+        fBefore,
+        fAfter,
+        lBefore,
+        lAfter,
+        outOfRange,
+        reversedOrder,
+        hasWarning,
+        reasons
+      };
+    }
 
     let state = null;
     let currentMode = 'member';
@@ -411,16 +470,22 @@
       }
     };
 
-    function showToast(msg) {
+    function showToast(msg, type = 'success') {
       const t = document.getElementById('toast');
+      const icon = document.getElementById('toast-icon');
       document.getElementById('toast-msg').textContent = msg;
-      t.classList.remove('hidden');
-      t.classList.add('flex');
+      if (type === 'warn') {
+        t.className = 'fixed bottom-6 right-6 z-50 flex max-w-md items-center gap-2.5 rounded-xl bg-rose-950 px-4 py-3 text-sm font-semibold text-white shadow-xl border-2 border-amber-400';
+        if (icon) { icon.textContent = '⚠️'; icon.className = 'text-amber-300 shrink-0'; }
+      } else {
+        t.className = 'fixed bottom-6 right-6 z-50 flex max-w-md items-center gap-2.5 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl border border-slate-700';
+        if (icon) { icon.textContent = '✔'; icon.className = 'text-emerald-400 shrink-0'; }
+      }
       clearTimeout(window._toastTimer);
       window._toastTimer = setTimeout(() => {
         t.classList.add('hidden');
         t.classList.remove('flex');
-      }, 2400);
+      }, type === 'warn' ? 4500 : 2400);
     }
 
     function escapeHtml(str) {
@@ -549,6 +614,7 @@
         m.project_meetings = projects.reduce((s, a) => s + a.meeting_count, 0);
         m.ssp_total_count = checkedActs.length;
         m.ssp_meetings = m.study_meetings + m.seminar_meetings + m.project_meetings;
+        m.out_of_period_checked_count = checkedActs.filter(a => getEvalPeriodStatus(a).outOfRange).length;
         m.is_3plus_ssp = checkedActs.length >= 3;
         m.has_modified = acts.some(a => a.user_modified || a.is_gaon_checked);
         m.ssp_summary_text = checkedActs.map(a =>
@@ -912,10 +978,15 @@
       const gCat = act.gaon_category;
       const st = CATEGORY_STYLE[gCat] || CATEGORY_STYLE['프로젝트'];
       const cnt = act.meeting_count;
+      const evalStatus = getEvalPeriodStatus(act);
 
-      const cardOuterClass = isChecked
-        ? `border-2 ${st.cardBorder} bg-white shadow-md ring-2 ring-blue-500/10`
-        : 'border border-slate-200 bg-white shadow-2xs';
+      const cardOuterClass = (isChecked && evalStatus.hasWarning)
+        ? 'border-2 border-amber-400 bg-white shadow-md ring-2 ring-amber-400/20'
+        : isChecked
+          ? `border-2 ${st.cardBorder} bg-white shadow-md ring-2 ring-blue-500/10`
+          : evalStatus.hasWarning
+            ? 'border border-amber-300 bg-white shadow-2xs'
+            : 'border border-slate-200 bg-white shadow-2xs';
 
       const teamBadgeHtml = act.team_type === '팀'
         ? `<span class="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-[11px] font-bold text-blue-700">👥 CSV 기재: 팀 ${act.team_size ? `(${escapeHtml(act.team_size)}명)` : ''}</span>`
@@ -965,6 +1036,12 @@
                   ${act.tech_stack ? `<div><b class="text-slate-700">기술스택:</b> <span class="font-mono text-[11px] text-blue-700">${escapeHtml(act.tech_stack)}</span></div>` : ''}
                   ${act.award_level ? `<div><b class="text-slate-700">수상내역:</b> <span class="font-bold text-amber-700">🏅 ${escapeHtml(act.award_level)}</span></div>` : ''}
                   ${act.cert_grade ? `<div><b class="text-slate-700">자격증 등급:</b> ${escapeHtml(act.cert_grade)}</div>` : ''}
+                  ${evalStatus.hasWarning ? `
+                    <div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-950 space-y-0.5">
+                      <div class="font-extrabold text-amber-800">⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 포함</div>
+                      <div>현재 설정 날짜: <b class="tabular-nums">${escapeHtml(act.session_schedule_text)}</b></div>
+                    </div>
+                  ` : ''}
                 </div>
               </div>
 
@@ -1167,38 +1244,38 @@
 
                   <!-- Bottom Row: ③ 1회차 날짜 & 마지막 회차 날짜만 입력 -->
                   <div class="space-y-2">
-                    <div class="flex items-center justify-between text-xs">
-                      <span class="font-extrabold text-slate-800">③ 모임 날짜 입력 (1회차 & 마지막 회차만 입력)</span>
-                      <span class="rounded-full ${st.pillBg} px-2.5 py-0.5 text-[11px] font-bold tabular-nums">
+                    <div class="flex flex-wrap items-center justify-between gap-1 text-xs">
+                      <span class="font-extrabold text-slate-800">③ 모임 날짜 입력 (평가기간: 2025.11.01 ~ 2026.10.31)</span>
+                      <span class="rounded-full ${evalStatus.hasWarning ? 'bg-amber-600 text-white' : st.pillBg} px-2.5 py-0.5 text-[11px] font-bold tabular-nums">
                         총 ${cnt}회차 (${escapeHtml(act.session_schedule_text)})
                       </span>
                     </div>
 
                     ${cnt === 1 ? `
-                      <div class="rounded-xl border-2 border-blue-200 bg-blue-50/30 p-3 flex flex-wrap items-center justify-between gap-3">
+                      <div class="rounded-xl border-2 ${evalStatus.fOut ? 'border-rose-400 bg-rose-50/50' : 'border-blue-200 bg-blue-50/30'} p-3 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex items-center gap-2">
-                          <span class="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-extrabold text-white">1회차 (단일 모임)</span>
+                          <span class="rounded-lg ${evalStatus.fOut ? 'bg-rose-600' : 'bg-blue-600'} px-2.5 py-1 text-xs font-extrabold text-white">1회차 (단일 모임)</span>
                           <span class="text-xs text-slate-600">회차를 2회차 이상으로 설정하면 마지막 회차 날짜칸이 함께 표시됩니다</span>
                         </div>
                         <input
                           type="date"
                           value="${escapeHtml(act.first_session_date)}"
                           onchange="updateEndpointDate('${act.id}', 'first', this.value)"
-                          class="rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-bold text-slate-900 tabular-nums outline-none focus:border-blue-600"
+                          class="rounded-xl border ${evalStatus.fOut ? 'border-rose-500 text-rose-800' : 'border-slate-300 text-slate-900'} bg-white px-3.5 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-blue-600"
                         />
                       </div>
                     ` : `
                       <div class="grid grid-cols-1 sm:grid-cols-11 items-center gap-2.5">
-                        <div class="sm:col-span-5 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                        <div class="sm:col-span-5 rounded-xl border ${evalStatus.fOut ? 'border-2 border-rose-400 bg-rose-50/50' : 'border-slate-200 bg-slate-50/60'} p-3">
                           <div class="flex items-center justify-between mb-1">
-                            <span class="rounded-md bg-slate-800 px-2 py-0.5 text-xs font-extrabold text-white">1회차 날짜</span>
-                            <span class="text-[11px] font-semibold text-slate-500">첫 모임 시작일</span>
+                            <span class="rounded-md ${evalStatus.fOut ? 'bg-rose-600' : 'bg-slate-800'} px-2 py-0.5 text-xs font-extrabold text-white">1회차 날짜</span>
+                            <span class="text-[11px] font-semibold ${evalStatus.fOut ? 'text-rose-700' : 'text-slate-500'}">${evalStatus.fOut ? '⚠️ 기간 외 날짜' : '첫 모임 시작일'}</span>
                           </div>
                           <input
                             type="date"
                             value="${escapeHtml(act.first_session_date)}"
                             onchange="updateEndpointDate('${act.id}', 'first', this.value)"
-                            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 tabular-nums outline-none focus:border-blue-600"
+                            class="w-full rounded-lg border ${evalStatus.fOut ? 'border-rose-400 text-rose-800' : 'border-slate-300 text-slate-900'} bg-white px-3 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-blue-600"
                           />
                         </div>
 
@@ -1207,20 +1284,54 @@
                           <span class="text-[10px] font-bold text-slate-400 whitespace-nowrap">총 ${cnt}회</span>
                         </div>
 
-                        <div class="sm:col-span-5 rounded-xl border-2 border-blue-200 bg-blue-50/40 p-3">
+                        <div class="sm:col-span-5 rounded-xl border-2 ${evalStatus.lOut || evalStatus.reversedOrder ? 'border-rose-400 bg-rose-50/50' : 'border-blue-200 bg-blue-50/40'} p-3">
                           <div class="flex items-center justify-between mb-1">
-                            <span class="rounded-md bg-blue-600 px-2 py-0.5 text-xs font-extrabold text-white">마지막 ${cnt}회차 날짜</span>
-                            <span class="text-[11px] font-bold text-blue-700">마지막 모임일</span>
+                            <span class="rounded-md ${evalStatus.lOut || evalStatus.reversedOrder ? 'bg-rose-600' : 'bg-blue-600'} px-2 py-0.5 text-xs font-extrabold text-white">마지막 ${cnt}회차 날짜</span>
+                            <span class="text-[11px] font-bold ${evalStatus.lOut || evalStatus.reversedOrder ? 'text-rose-700' : 'text-blue-700'}">${evalStatus.lOut ? '⚠️ 기간 외 날짜' : evalStatus.reversedOrder ? '⚠️ 시작일보다 빠름' : '마지막 모임일'}</span>
                           </div>
                           <input
                             type="date"
                             value="${escapeHtml(act.last_session_date)}"
                             onchange="updateEndpointDate('${act.id}', 'last', this.value)"
-                            class="w-full rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 tabular-nums outline-none focus:border-blue-600"
+                            class="w-full rounded-lg border ${evalStatus.lOut || evalStatus.reversedOrder ? 'border-rose-400 text-rose-800' : 'border-blue-300 text-slate-900'} bg-white px-3 py-1.5 text-sm font-bold tabular-nums outline-none focus:border-blue-600"
                           />
                         </div>
                       </div>
                     `}
+
+                    ${evalStatus.hasWarning ? `
+                      <div class="rounded-xl border-2 border-amber-400 bg-amber-50 p-3 text-xs text-amber-950 space-y-2">
+                        <div class="flex items-start gap-2">
+                          <span class="text-base leading-none">⚠️</span>
+                          <div class="flex-1 space-y-1">
+                            <div class="font-extrabold text-rose-800">
+                              평가대상 기간(2025. 11. 1. ~ 2026. 10. 31.) 외의 날짜가 지정되었습니다!
+                            </div>
+                            <ul class="list-disc pl-4 space-y-0.5 text-[11px] text-amber-950 font-semibold">
+                              ${evalStatus.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+                            </ul>
+                            <p class="text-[11px] text-slate-700">
+                              실제 모임 일자가 <b>2025. 11. 1. ~ 2026. 10. 31.</b> 범위 안이라면 날짜를 수정해 주시고, 평가 기간 이후 시작된 활동이라면 기간 내 모임만 반영해 주세요.
+                            </p>
+                          </div>
+                        </div>
+                        ${(evalStatus.fBefore || evalStatus.lAfter) ? `
+                          <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-200/80">
+                            <span class="text-[11px] font-bold text-amber-900">빠른 기간 맞추기:</span>
+                            ${evalStatus.fBefore ? `
+                              <button type="button" onclick="updateEndpointDate('${act.id}', 'first', '${EVAL_PERIOD_START}')" class="rounded-lg border border-amber-400 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100">
+                                1회차를 2025-11-01로 맞추기
+                              </button>
+                            ` : ''}
+                            ${evalStatus.lAfter ? `
+                              <button type="button" onclick="updateEndpointDate('${act.id}', 'last', '${EVAL_PERIOD_END}')" class="rounded-lg border border-amber-400 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100">
+                                마지막 회차를 2026-10-31로 맞추기
+                              </button>
+                            ` : ''}
+                          </div>
+                        ` : ''}
+                      </div>
+                    ` : ''}
                   </div>
                 </div>
               `}
@@ -1240,8 +1351,13 @@
       normalizeActivityEndpoints(act);
 
       if (act.is_gaon_checked) {
+        const evalSt = getEvalPeriodStatus(act);
         saveState(`${act.name}(${act.student_id}) 회원이 '${act.title}' 실적을 가온누리 실적([${act.gaon_category}] · 동아리원 ${act.gaon_member_count}명 · 총 ${act.meeting_count}회차)으로 체크했습니다.`);
-        showToast(`✅ '${act.title}' — 가온누리 실적으로 체크되었습니다. 이제 회차를 설정하세요!`);
+        if (evalSt.hasWarning) {
+          showToast(`⚠️ '${act.title}' 체크 완료 — 단, 평가대상 기간(2025.11.01~2026.10.31) 외 날짜(${act.session_schedule_text})가 포함되어 있습니다!`, 'warn');
+        } else {
+          showToast(`✅ '${act.title}' — 가온누리 실적으로 체크되었습니다. 이제 회차를 설정하세요!`);
+        }
       } else {
         saveState(`${act.name}(${act.student_id}) 회원이 '${act.title}' 실적의 가온누리 실적 체크를 해제했습니다.`);
         showToast(`'${act.title}' — 가온누리 실적 체크가 해제되었습니다.`);
@@ -1296,7 +1412,12 @@
 
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}' 모임 횟수를 총 ${cnt}회차(${act.session_schedule_text})로 설정했습니다.`);
       renderAfterDataChange();
-      showToast(`${act.title} — 총 ${cnt}회차로 저장되었습니다.`);
+      const evalStCnt = getEvalPeriodStatus(act);
+      if (evalStCnt.hasWarning) {
+        showToast(`⚠️ 총 ${cnt}회차 저장됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있으니 날짜를 확인해 주세요.`, 'warn');
+      } else {
+        showToast(`${act.title} — 총 ${cnt}회차로 저장되었습니다.`);
+      }
     }
 
     function updateEndpointDate(actId, which, newDate) {
@@ -1319,9 +1440,14 @@
       normalizeActivityEndpoints(act);
 
       const labelStr = which === 'first' ? '1회차' : `마지막(${act.meeting_count}회차)`;
-      saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}'의 ${labelStr} 날짜를 ${newDate}로 입력했습니다.`);
+      const evalSt = getEvalPeriodStatus(act);
+      saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}'의 ${labelStr} 날짜를 ${newDate}로 입력했습니다.${evalSt.hasWarning ? ' [평가기간 외 날짜]' : ''}`);
       renderAfterDataChange();
-      showToast(`${act.title} — ${labelStr} 날짜(${newDate})가 저장되었습니다.`);
+      if (evalSt.hasWarning) {
+        showToast(`⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 경고: ${evalSt.reasons[0]}`, 'warn');
+      } else {
+        showToast(`${act.title} — ${labelStr} 날짜(${newDate})가 저장되었습니다.`);
+      }
     }
 
     function renderAfterDataChange() {
@@ -1362,6 +1488,7 @@
 
       const sumTotalSSPCnt = sumStudyCnt + sumSeminarCnt + sumProjCnt;
       const sumTotalSSPMeet = sumStudyMeet + sumSeminarMeet + sumProjMeet;
+      const outOfPeriodCheckedCnt = state.activities.filter(a => a.is_gaon_checked && getEvalPeriodStatus(a).outOfRange).length;
 
       return `
         <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -1372,8 +1499,9 @@
                 전체 동아리원 <b>${totalMembersCount}명</b> (CSV 보유 ${csvActiveMembersCount}명 / 가온누리 실적 체크 완료 <b>${checkedMembersCount}명</b> / 현재 표 표시 ${targetMembers.length}명)
               </span>
             </div>
-            <div class="text-xs font-semibold text-blue-700">
-              가온누리 실적 3건 이상 인정 회원: <b>${threePlusMembersCount}명</b>
+            <div class="flex flex-wrap items-center gap-3 text-xs font-semibold">
+              <span class="text-blue-700">가온누리 실적 3건 이상 인정 회원: <b>${threePlusMembersCount}명</b></span>
+              ${outOfPeriodCheckedCnt > 0 ? `<span class="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 font-extrabold text-amber-900">⚠️ 평가기간 외 날짜 체크 실적: ${outOfPeriodCheckedCnt}건</span>` : ''}
             </div>
           </div>
 
@@ -1507,12 +1635,14 @@
                   normalizeActivityEndpoints(a);
                   const c = a.meeting_count;
                   const fixed = isOfficialFixed(a);
+                  const evalSt = getEvalPeriodStatus(a);
                   return `
-                    <div class="rounded-xl border ${colorMap.itemBorder} p-2.5 text-left transition hover:bg-white">
+                    <div class="rounded-xl border ${evalSt.hasWarning && !fixed ? 'border-amber-400 bg-amber-50/40' : colorMap.itemBorder} p-2.5 text-left transition hover:bg-white">
                       <div class="flex items-start justify-between gap-1.5">
                         <div class="font-bold text-xs text-slate-900 leading-snug">
                           <span class="text-blue-600">${fixed ? '🔒' : '☑'}</span> ${escapeHtml(a.title)}
                           <span class="ml-1 rounded bg-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">동아리원 ${a.gaon_member_count}명${fixed ? ' 고정' : ''}</span>
+                          ${evalSt.hasWarning && !fixed ? `<span class="ml-1 rounded bg-rose-100 border border-rose-300 px-1.5 py-0.2 text-[10px] font-extrabold text-rose-700">⚠️ 평가기간 외 날짜</span>` : ''}
                         </div>
                         ${fixed ? `
                           <div class="shrink-0 flex items-center gap-1">
@@ -1546,29 +1676,34 @@
                             <b class="text-slate-900">1회차 확정일:</b> ${escapeHtml(a.first_session_date)}
                           </span>
                         ` : `
-                          <label class="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-slate-700">
-                            <b class="text-slate-900">1회차</b>
+                          <label class="inline-flex items-center gap-1 rounded border ${evalSt.fOut ? 'border-rose-400 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-700'} px-1.5 py-0.5">
+                            <b class="${evalSt.fOut ? 'text-rose-800' : 'text-slate-900'}">1회차</b>
                             <input
                               type="date"
                               value="${escapeHtml(a.first_session_date)}"
                               onchange="updateEndpointDate('${a.id}', 'first', this.value)"
-                              class="w-[88px] bg-transparent text-[10px] font-semibold text-slate-600 tabular-nums outline-none cursor-pointer"
+                              class="w-[88px] bg-transparent text-[10px] font-semibold tabular-nums outline-none cursor-pointer"
                             />
                           </label>
                           ${c > 1 ? `
                             <span class="text-slate-400 font-bold">~</span>
-                            <label class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50/40 px-1.5 py-0.5 text-blue-900">
-                              <b class="text-blue-700">마지막(${c}회차)</b>
+                            <label class="inline-flex items-center gap-1 rounded border ${evalSt.lOut || evalSt.reversedOrder ? 'border-rose-400 bg-rose-50 text-rose-800' : 'border-blue-200 bg-blue-50/40 text-blue-900'} px-1.5 py-0.5">
+                              <b class="${evalSt.lOut || evalSt.reversedOrder ? 'text-rose-700' : 'text-blue-700'}">마지막(${c}회차)</b>
                               <input
                                 type="date"
                                 value="${escapeHtml(a.last_session_date)}"
                                 onchange="updateEndpointDate('${a.id}', 'last', this.value)"
-                                class="w-[88px] bg-transparent text-[10px] font-semibold text-blue-800 tabular-nums outline-none cursor-pointer"
+                                class="w-[88px] bg-transparent text-[10px] font-semibold tabular-nums outline-none cursor-pointer"
                               />
                             </label>
                           ` : ''}
                         `}
                       </div>
+                      ${evalSt.hasWarning && !fixed ? `
+                        <div class="mt-1 text-[10px] font-bold text-rose-700">
+                          ⚠️ ${escapeHtml(evalSt.reasons[0])} (기준: 2025.11.01 ~ 2026.10.31)
+                        </div>
+                      ` : ''}
                     </div>
                   `;
                 }).join('')}
@@ -1757,7 +1892,7 @@
 
     function setAdminMemberFilter(f) {
       adminMemberFilter = f;
-      ['all', 'checked_any', 'csv_any', '3plus'].forEach(k => {
+      ['all', 'checked_any', 'csv_any', '3plus', 'out_of_period'].forEach(k => {
         const btn = document.getElementById('amf-' + k);
         if (!btn) return;
         btn.className = k === f
@@ -1782,6 +1917,7 @@
         if (adminMemberFilter === 'checked_any' && m.ssp_total_count === 0) return false;
         if (adminMemberFilter === 'csv_any' && m.total_activities === 0) return false;
         if (adminMemberFilter === '3plus' && !m.is_3plus_ssp) return false;
+        if (adminMemberFilter === 'out_of_period' && !(m.out_of_period_checked_count > 0)) return false;
 
         if (q) {
           const mActs = state.activities.filter(a => a.student_id === m.student_id);
@@ -1873,6 +2009,7 @@
       document.getElementById('new-act-first-date').value = '2026-09-01';
       document.getElementById('new-act-last-date').value = '2026-10-20';
       syncNewActModalEndpointLabels();
+      validateNewActModalDates();
 
       const modal = document.getElementById('new-activity-modal');
       modal.classList.remove('hidden');
@@ -1896,6 +2033,40 @@
         wrap.classList.remove('opacity-50', 'pointer-events-none');
         lbl.textContent = `마지막 회차 (${cnt}회차 날짜)`;
       }
+      validateNewActModalDates();
+    }
+
+    function validateNewActModalDates() {
+      const cnt = Math.max(1, Math.min(100, parseInt(document.getElementById('new-act-count').value, 10) || 1));
+      const fDate = document.getElementById('new-act-first-date').value || '';
+      const lDate = cnt === 1 ? fDate : (document.getElementById('new-act-last-date').value || '');
+      const st = getEvalPeriodStatus({ meeting_count: cnt, first_session_date: fDate, last_session_date: lDate });
+
+      const fBox = document.getElementById('new-act-first-date-box');
+      const lBox = document.getElementById('new-act-last-date-wrap');
+      const fb = document.getElementById('new-act-date-feedback');
+
+      if (fBox) {
+        fBox.className = st.fOut
+          ? 'rounded-lg border-2 border-rose-400 bg-rose-50/70 p-2.5'
+          : 'rounded-lg border border-slate-200 bg-white p-2.5';
+      }
+      if (lBox) {
+        const baseLock = cnt === 1 ? ' opacity-50 pointer-events-none' : '';
+        lBox.className = (st.lOut || st.reversedOrder)
+          ? 'rounded-lg border-2 border-rose-400 bg-rose-50/70 p-2.5' + baseLock
+          : 'rounded-lg border border-slate-200 bg-white p-2.5' + baseLock;
+      }
+      if (fb) {
+        if (st.hasWarning) {
+          fb.classList.remove('hidden');
+          fb.innerHTML = `⚠️ <b>평가대상 기간(2025. 11. 1. ~ 2026. 10. 31.) 외 날짜 지정됨:</b><br/>` + st.reasons.map(escapeHtml).join('<br/>');
+        } else {
+          fb.classList.add('hidden');
+          fb.innerHTML = '';
+        }
+      }
+      return st;
     }
 
     function saveNewActivityModal() {
@@ -1911,6 +2082,16 @@
       if (!title) {
         alert('활동명(스터디/세미나/프로젝트명)을 입력해 주세요.');
         return;
+      }
+
+      const evalSt = validateNewActModalDates();
+      if (evalSt.hasWarning) {
+        const ok = confirm(
+          `⚠️ 평가대상 기간(2025. 11. 1. ~ 2026. 10. 31.) 외의 날짜가 지정되었습니다.\n\n` +
+          evalSt.reasons.join('\n') +
+          `\n\n그래도 이 날짜 그대로 저장하시겠습니까? ('취소'를 누르면 날짜를 수정할 수 있습니다)`
+        );
+        if (!ok) return;
       }
 
       const m = state.members.find(x => x.student_id === sid);
@@ -1953,7 +2134,11 @@
       saveState(`${m ? m.name : sid} 회원이 새 가온누리 [${actType}] '${title}' (동아리원 ${clubCnt}명 · 총 ${cnt}회차) 실적을 등록했습니다.`);
       closeNewActivityModal();
       renderAfterDataChange();
-      showToast(`'${title}' 실적(총 ${cnt}회차)이 추가되었습니다.`);
+      if (evalSt.hasWarning) {
+        showToast(`⚠️ '${title}' 등록됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있습니다.`, 'warn');
+      } else {
+        showToast(`'${title}' 실적(총 ${cnt}회차)이 추가되었습니다.`);
+      }
     }
 
     // =========================================================================
