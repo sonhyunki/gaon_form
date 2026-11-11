@@ -541,7 +541,8 @@
     // =========================================================================
     // REALTIME SHARED CLOUD DB ENGINE (Firebase Realtime Database REST API)
     // =========================================================================
-    let CLOUD_DB_URL = localStorage.getItem('gaon_cloud_db_url') || '';
+    const DEFAULT_FIREBASE_URL = 'https://gaon-form-default-rtdb.firebaseio.com';
+    let CLOUD_DB_URL = localStorage.getItem('gaon_cloud_db_url') || DEFAULT_FIREBASE_URL;
 
     function normalizeFirebaseUrl(url) {
       if (!url) return '';
@@ -680,7 +681,7 @@
 
         if (changed) {
           recalcAll();
-          renderAfterDataChange(); syncActivityToCloud(act);
+          renderAfterDataChange();
           // Save to local storage cache as well
           saveToIndexedDb(state);
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
@@ -711,17 +712,29 @@
           last_modified_by: act.name,
           last_modified_at: new Date().toISOString()
         })
-      }).catch(err => console.warn('Single activity cloud sync failed:', err));
+      }).then(res => {
+        if (res.ok) {
+          updateCloudDbStatusUI(true);
+        } else if (res.status === 401) {
+          updateCloudDbStatusUI(false, '401');
+          showToast('⚠️ Firebase 보안 규칙(Rules)이 잠금 모드입니다. 규칙에서 read, write를 true로 설정해야 다른 사용자와 공유됩니다.', 'warn');
+        }
+      }).catch(err => {
+        console.warn('Single activity cloud sync failed:', err);
+      });
     }
 
-    function updateCloudDbStatusUI(connected) {
+    function updateCloudDbStatusUI(connected, errorMsg = '') {
       const btn = document.getElementById('cloud-db-badge-btn');
       const text = document.getElementById('cloud-db-status-text');
       if (!btn || !text) return;
 
       if (connected && CLOUD_DB_URL) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition';
-        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (모든 사용자 공유)';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (모든 사용자 실시간 공유)';
+      } else if (errorMsg && String(errorMsg).includes('401')) {
+        btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 보안 규칙(Rules) 설정 필요 (클릭)';
       } else {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-2xs hover:bg-rose-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> 🔴 로컬 전용 (클라우드 DB 미연동 - 클릭하여 설정)';
@@ -2293,7 +2306,7 @@
       normalizeActivityEndpoints(act);
 
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}' 모임 횟수를 총 ${cnt}회차(${act.session_schedule_text})로 설정했습니다.`);
-      renderAfterDataChange(); syncActivityToCloud(act);
+      renderAfterDataChange();
       const evalStCnt = getEvalPeriodStatus(act);
       if (evalStCnt.hasWarning) {
         showToast(`⚠️ 총 ${cnt}회차 저장됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있으니 날짜를 확인해 주세요.`, 'warn');
@@ -2332,7 +2345,7 @@
       const labelStr = which === 'first' ? '1회차' : `마지막(${act.meeting_count}회차)`;
       const evalSt = getEvalPeriodStatus(act);
       saveState(`${act.name}(${act.student_id}) 회원이 [${act.gaon_category}] '${act.title}'의 ${labelStr} 날짜를 ${newDate}로 입력했습니다.${evalSt.hasWarning ? ' [평가기간 외 날짜]' : ''}`);
-      renderAfterDataChange(); syncActivityToCloud(act);
+      renderAfterDataChange();
       if (evalSt.hasWarning) {
         showToast(`⚠️ 평가대상 기간(2025.11.01 ~ 2026.10.31) 외 날짜 경고: ${evalSt.reasons[0]}`, 'warn');
       } else {
@@ -3029,7 +3042,7 @@
       state.activities.push(newAct);
       saveState(`${m ? m.name : sid} 회원이 새 가온누리 [${actType}] '${title}' (동아리원 ${clubCnt}명 · 총 ${cnt}회차) 실적을 등록했습니다.`);
       closeNewActivityModal();
-      renderAfterDataChange(); syncActivityToCloud(act);
+      renderAfterDataChange();
       if (evalSt.hasWarning) {
         showToast(`⚠️ '${title}' 등록됨 — 평가기간(2025.11.01~2026.10.31) 외 날짜가 포함되어 있습니다.`, 'warn');
       } else {
@@ -3218,6 +3231,23 @@
           현재 사이트는 <b>GitHub Pages 정적 사이트</b>로 호스팅되어 있어, 클라우드 DB가 연동되지 않으면 <b>각 사용자의 브라우저(로컬)</b>에만 저장됩니다.<br/>
           따라서 동아리원들이 휴대폰으로 체크한 내역을 관리자님이 한 곳에서 모아보시려면, <b>무료 구글 Firebase 클라우드 DB</b>를 1분 만에 연결하셔야 합니다.
         </p>
+      </div>
+
+      <!-- 401 Rules Notice -->
+      <div class="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 space-y-2">
+        <div class="font-black text-amber-900 text-sm flex items-center gap-1.5">
+          <span>⚠️ 중요: Firebase 보안 규칙(Rules) 설정 필수 (401 권한 오류 해결)</span>
+        </div>
+        <p class="leading-relaxed">
+          Firebase를 처음 만들면 보안 규칙이 '잠금 모드(false)'로 되어 있어 다른 기기에서 저장이 차단됩니다.<br/>
+          <b>Firebase 콘솔 > Realtime Database > [규칙(Rules)] 탭</b>에서 아래 코드를 복사해 붙여넣고 <b>[게시]</b> 버튼을 꼭 눌러주세요:
+        </p>
+        <pre class="bg-slate-900 text-emerald-400 p-3 rounded-xl font-mono text-xs overflow-x-auto select-all">{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</pre>
       </div>
 
       <!-- Step-by-Step 1-Minute Guide -->
