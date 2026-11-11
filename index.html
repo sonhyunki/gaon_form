@@ -868,18 +868,20 @@
       }
     }
 
-    // Sync immediately when user returns to browser tab
+    // Sync immediately when user returns to browser tab (admin mode only)
     if (typeof document !== 'undefined' && document.addEventListener) {
       document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && CLOUD_DB_URL) {
+        if (!document.hidden && CLOUD_DB_URL && currentMode === 'admin') {
           syncFromCloudDb(true);
         }
       });
     }
 
-    // Auto-poll cloud DB every 15 seconds with ~15-byte ultra-lightweight check
+    // Auto-poll cloud DB: ONLY in ADMIN dashboard mode!
+    // Regular members only edit their own activities, so background polling is 100% OFF for members!
+    // This saves 100% of background polling traffic for all 70 students!
     setInterval(() => {
-      if (CLOUD_DB_URL) {
+      if (CLOUD_DB_URL && currentMode === 'admin') {
         syncFromCloudDb(true);
       }
     }, 15000);
@@ -1520,6 +1522,7 @@
         gate.classList.add('hidden');
         dash.classList.remove('hidden');
         renderAdminDashboard();
+        if (CLOUD_DB_URL) syncFromCloudDb(true);
       } else {
         gate.classList.remove('hidden');
         dash.classList.add('hidden');
