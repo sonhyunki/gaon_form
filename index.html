@@ -155,9 +155,8 @@
             <input
               id="member-search-input"
               type="text"
-              oninput="onMemberSearchInput()"
               onkeydown="if(event.key==='Enter') triggerMemberSearch()"
-              placeholder="본인의 이름 또는 학번을 입력하세요 (예: 손현기, 김민경, 기세찬, 최승우, 이하은...)"
+              placeholder="본인의 이름 또는 학번을 다 입력한 뒤 [조회하기] 버튼을 눌러주세요"
               class="w-full rounded-xl border-2 border-slate-300 bg-white pl-10 pr-4 py-3 text-base font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
             />
             <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
@@ -572,16 +571,14 @@
     }
 
     // =========================================================================
-    // ULTRA-LIGHTWEIGHT DELTA CLOUD SYNC ENGINE (/gaon_v2/by_member)
-    // - Per-member fetch: ~0.5KB instead of 550KB (99.9% daily quota saved!)
-    // - Zero-body writes: ?print=silent returns HTTP 204 (0 download bytes!)
-    // - Smart 500ms debounce + instant pagehide flush
+    // MANUAL SEARCH & MANUAL SAVE CLOUD ENGINE (/gaon_v2/by_member)
+    // - Zero automatic background requests (No polling, No oninput, No onload fetch)
+    // - Fetches ONLY when user clicks [조회하기] (~0.5KB)
+    // - Saves ONLY when user clicks [💾 저장하기] (?print=silent -> 0 download bytes!)
     // =========================================================================
-    const memberLastFetchedAt = {};
-    const memberFetchInFlight = {};
-    const pendingCloudWrites = {};
-    const pendingCloudActs = {};
-    let hasMigratedLocalToV2 = false;
+    const unsavedMemberIds = new Set();
+    const savedMemberIds = new Set();
+    let isSavingToCloud = false;
 
     function packActDelta(act) {
       const d = {
@@ -665,8 +662,6 @@
       if (local.user_modified) {
         const localTime = new Date(local.last_modified_at || 0).getTime();
         if (localTime > rTime) {
-          // Local modification is newer than remote; keep local and ensure cloud gets it
-          syncActivityToCloud(local);
           return false;
         }
       }
@@ -712,9 +707,8 @@
         localStorage.setItem('gaon_cloud_db_url', clean);
         updateCloudDbStatusUI(true);
 
-        await syncFromCloudDb(false);
         closeCloudDbModal();
-        showToast('🎉 초경량 클라우드 DB 연결 완료! (일일 한도 99.8% 절약 모드)');
+        showToast('🎉 클라우드 DB 연결 완료! (수동 조회 · 수동 저장 초절약 모드)');
       } catch (err) {
         alert(`클라우드 DB 연결에 실패했습니다.\n사유: ${err.message}\n\nFirebase 보안 규칙에서 '테스트 모드(read, write: true)'로 설정되었는지 확인해 주세요.`);
       }
@@ -731,7 +725,7 @@
 
     async function uploadCurrentStateToCloudDb() {
       if (!CLOUD_DB_URL) return;
-      showToast('☁️ 체크·수정된 실적 데이터를 초경량 포맷으로 업로드 중...');
+      showToast('☁️ 체크·수정된 실적 데이터를 클라우드 DB에 일괄 저장 중...');
       try {
         const byMember = {};
         let modCount = 0;
@@ -757,42 +751,16 @@
           return;
         }
         if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
-        showToast(`🎉 수정·체크된 실적 ${modCount}건이 초경량 포맷으로 클라우드에 저장되었습니다!`);
+        unsavedMemberIds.clear();
+        showToast(`🎉 수정·체크된 실적 ${modCount}건이 클라우드에 일괄 저장되었습니다!`);
       } catch (e) {
         showToast('클라우드 업로드 실패: ' + e.message, 'warn');
       }
     }
 
-    function migrateLocalModifiedToCloudV2() {
-      if (!CLOUD_DB_URL || hasMigratedLocalToV2) return;
-      hasMigratedLocalToV2 = true;
-      const modActs = state.activities.filter(a => a.user_modified || String(a.id).startsWith('act-'));
-      if (modActs.length === 0) return;
-      const byMember = {};
-      modActs.forEach(a => {
-        const sid = a.student_id || 'unknown';
-        if (!byMember[sid]) byMember[sid] = {};
-        byMember[sid][a.id] = packActDelta(a);
-      });
-      const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
-      fetch(`${baseUrl}/gaon_v2/by_member.json?print=silent`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(byMember)
-      }).catch(() => {});
-    }
-
-    // Member-scoped fetch (~0.5KB instead of 550KB!): fetches ONLY the searched member's deltas
-    async function syncMemberFromCloud(studentId, force = false) {
+    // Called ONLY when user explicitly clicks [조회하기]
+    async function fetchMemberFromCloudOnSearch(studentId) {
       if (!CLOUD_DB_URL || !studentId) return;
-      const now = Date.now();
-      if (!force && memberLastFetchedAt[studentId] && (now - memberLastFetchedAt[studentId] < 12000)) {
-        return;
-      }
-      if (memberFetchInFlight[studentId]) return;
-      memberFetchInFlight[studentId] = true;
-      memberLastFetchedAt[studentId] = now;
-
       try {
         const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
         const res = await fetch(`${baseUrl}/gaon_v2/by_member/${encodeURIComponent(studentId)}.json`, { cache: 'no-store' });
@@ -814,45 +782,94 @@
 
         if (changed) {
           recalcAll();
-          renderAfterDataChange();
+          renderMemberSearchResult();
           saveToIndexedDb(state);
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
         }
       } catch (e) {
-        console.warn('Member cloud sync error:', e);
-      } finally {
-        memberFetchInFlight[studentId] = false;
+        console.warn('Member cloud fetch error:', e);
       }
     }
 
-    // Admin / global sync: fetches ONLY modified deltas (/gaon_v2/by_member.json, ~1~35KB total)
-    async function syncFromCloudDb(silent = false) {
-      if (!CLOUD_DB_URL) return;
-      if (silent && typeof document !== 'undefined' && document.hidden) return;
+    // Called ONLY when user explicitly clicks [💾 저장하기] button!
+    async function saveMemberToCloud(studentId) {
+      const m = state.members.find(x => x.student_id === studentId);
+      const memberName = m ? m.name : studentId;
 
-      // If in member mode and silent, only sync the currently searched member (never download all members!)
-      if (silent && currentMode === 'member') {
-        const q = (searchedMemberName || '').trim().toLowerCase();
-        if (!q) return;
-        const matched = state.members.filter(m => m.name.toLowerCase() === q || m.student_id.toLowerCase() === q);
-        if (matched.length === 1) {
-          await syncMemberFromCloud(matched[0].student_id, false);
-        }
+      // Always save locally first
+      saveState(`${memberName}(${studentId}) 회원이 가온누리 실적 체크 내역을 최종 저장했습니다.`);
+
+      if (!CLOUD_DB_URL) {
+        unsavedMemberIds.delete(studentId);
+        savedMemberIds.add(studentId);
+        renderAfterDataChange();
+        showToast(`💾 '${memberName}' 회원의 실적이 브라우저에 저장되었습니다.`);
         return;
       }
 
+      if (isSavingToCloud) return;
+      isSavingToCloud = true;
+
       try {
+        const memberActs = state.activities.filter(a => a.student_id === studentId);
+        const memberPayload = {};
+        memberActs.forEach(a => {
+          // Include all non-fixed activities for this member so both checks and unchecks are saved accurately
+          if (!isOfficialFixed(a)) {
+            memberPayload[a.id] = packActDelta(a);
+          }
+        });
+
+        const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
+        const url = `${baseUrl}/gaon_v2/by_member/${encodeURIComponent(studentId)}.json?print=silent`;
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(memberPayload)
+        });
+
+        if (res.ok || res.status === 204) {
+          unsavedMemberIds.delete(studentId);
+          savedMemberIds.add(studentId);
+          updateCloudDbStatusUI(true);
+          renderAfterDataChange();
+          showToast(`🎉 '${memberName}' 회원의 실적 내역이 서버(클라우드 DB)에 최종 저장되었습니다!`);
+        } else if (res.status === 401) {
+          updateCloudDbStatusUI(false, '401');
+          showToast('⚠️ Firebase 보안 규칙(Rules)이 잠금 모드입니다.', 'warn');
+        } else if (res.status === 402 || res.status === 429) {
+          updateCloudDbStatusUI(false, 'quota');
+          showToast('⚠️ Firebase 일일 무료 한도 초과 — 로컬에는 안전하게 저장되었습니다. [내 체크 결과 제출] 코드 복사를 이용해 주세요.', 'warn');
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (err) {
+        console.warn('Manual save to cloud failed:', err);
+        showToast('⚠️ 클라우드 저장 중 오류가 발생했습니다. 다시 시도하거나 [내 체크 결과 제출]을 눌러주세요.', 'warn');
+      } finally {
+        isSavingToCloud = false;
+      }
+    }
+
+    // Called ONLY when Admin clicks [🔄 클라우드 최신 현황 불러오기] or enters Admin Mode
+    async function syncFromCloudDb(silent = false) {
+      if (!CLOUD_DB_URL) return;
+      try {
+        if (!silent) showToast('☁️ 클라우드에서 전체 회원의 저장 현황을 불러오는 중...');
         const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
         const res = await fetch(`${baseUrl}/gaon_v2/by_member.json`, { cache: 'no-store' });
         if (res.status === 402 || res.status === 429) {
           updateCloudDbStatusUI(false, 'quota');
-          if (!silent) showToast('⚠️ Firebase 일일 무료 한도(360MB)가 일시 초과되었습니다. (로컬 저장 및 제출 코드 기능은 정상 작동)', 'warn');
+          if (!silent) showToast('⚠️ Firebase 일일 무료 한도(360MB)가 일시 초과되었습니다.', 'warn');
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const allMemberDeltas = await res.json();
         updateCloudDbStatusUI(true);
-        if (!allMemberDeltas || typeof allMemberDeltas !== 'object') return;
+        if (!allMemberDeltas || typeof allMemberDeltas !== 'object') {
+          if (!silent) showToast('☁️ 아직 클라우드에 새로 저장된 회원 내역이 없습니다.');
+          return;
+        }
 
         let changed = false;
         Object.values(allMemberDeltas).forEach(memberObj => {
@@ -869,9 +886,9 @@
           renderAfterDataChange();
           saveToIndexedDb(state);
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-          if (!silent) showToast('☁️ 최신 클라우드 실적 내역을 동기화했습니다.');
+          showToast('☁️ 클라우드에서 전체 회원의 최신 저장 내역을 불러왔습니다!');
         } else if (!silent) {
-          showToast('☁️ 이미 최신 상태입니다.');
+          showToast('☁️ 이미 모든 회원 데이터가 최신 상태입니다.');
         }
       } catch (e) {
         if (!silent) console.warn('Cloud sync error:', e);
@@ -879,60 +896,23 @@
       }
     }
 
-    function flushActivityToCloudNow(act, useKeepalive = false) {
-      if (!CLOUD_DB_URL || !act || !act.id || !act.student_id) return;
-      if (pendingCloudWrites[act.id]) {
-        clearTimeout(pendingCloudWrites[act.id]);
-        delete pendingCloudWrites[act.id];
-      }
-      delete pendingCloudActs[act.id];
-
-      const baseUrl = normalizeFirebaseUrl(CLOUD_DB_URL);
-      const url = `${baseUrl}/gaon_v2/by_member/${encodeURIComponent(act.student_id)}/${encodeURIComponent(act.id)}.json?print=silent`;
-      const payload = packActDelta(act);
-
-      fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        keepalive: useKeepalive
-      }).then(res => {
-        if (res.ok || res.status === 204) {
-          updateCloudDbStatusUI(true);
-        } else if (res.status === 401) {
-          updateCloudDbStatusUI(false, '401');
-          showToast('⚠️ Firebase 보안 규칙(Rules)이 잠금 모드입니다. 규칙에서 read, write를 true로 설정해 주세요.', 'warn');
-        } else if (res.status === 402 || res.status === 429) {
-          updateCloudDbStatusUI(false, 'quota');
-          showToast('⚠️ Firebase 무료 한도 초과 — 로컬에는 안전하게 저장되었습니다. 상단 [제출 코드 복사]를 활용해 주세요.', 'warn');
-        }
-      }).catch(err => {
-        console.warn('Single activity cloud sync failed:', err);
-      });
-    }
-
+    // Local edit hook: does NOT send any network request! Only marks member as having unsaved changes.
     function syncActivityToCloud(act) {
-      if (!CLOUD_DB_URL || !act || !act.id) return;
+      if (!act || !act.student_id) return;
       act.user_modified = true;
-      if (!act.last_modified_at) {
-        act.last_modified_at = new Date().toISOString();
-      }
-      pendingCloudActs[act.id] = act;
-      if (pendingCloudWrites[act.id]) {
-        clearTimeout(pendingCloudWrites[act.id]);
-      }
-      // 500ms debounce merges rapid clicks (e.g. session count +/-) into a single 85-byte request
-      pendingCloudWrites[act.id] = setTimeout(() => {
-        flushActivityToCloudNow(act, false);
-      }, 500);
+      act.last_modified_at = new Date().toISOString();
+      unsavedMemberIds.add(act.student_id);
+      savedMemberIds.delete(act.student_id);
+      renderAfterDataChange();
     }
 
+    // Warn user if they try to close tab with unsaved checkbox changes
     if (typeof window !== 'undefined' && window.addEventListener) {
-      window.addEventListener('pagehide', () => {
-        Object.values(pendingCloudActs).forEach(a => flushActivityToCloudNow(a, true));
-      });
-      window.addEventListener('beforeunload', () => {
-        Object.values(pendingCloudActs).forEach(a => flushActivityToCloudNow(a, true));
+      window.addEventListener('beforeunload', (e) => {
+        if (unsavedMemberIds.size > 0) {
+          e.preventDefault();
+          e.returnValue = '아직 [저장하기] 버튼을 누르지 않은 변경사항이 있습니다.';
+        }
       });
     }
 
@@ -943,34 +923,18 @@
 
       if (connected && CLOUD_DB_URL) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100 transition';
-        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 🟢 실시간 클라우드 DB 연결됨 (일일한도 99.8% 절약 모드)';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-500"></span> 🟢 클라우드 DB 연결됨 (조회·저장 버튼 수동 전송 모드)';
       } else if (errorMsg && String(errorMsg).includes('401')) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 보안 규칙(Rules) 설정 필요 (클릭)';
       } else if (errorMsg && String(errorMsg).includes('quota')) {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 transition';
-        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 무료 한도 초과 (로컬 자동저장 작동중)';
+        text.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span> ⚠️ Firebase 무료 한도 초과 (로컬 저장 작동중)';
       } else {
         btn.className = 'inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800 shadow-2xs hover:bg-rose-100 transition';
         text.innerHTML = '<span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> 🔴 로컬 전용 (클라우드 DB 미연동 - 클릭하여 설정)';
       }
     }
-
-    // Sync when admin returns to browser tab
-    if (typeof document !== 'undefined' && document.addEventListener) {
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && CLOUD_DB_URL && currentMode === 'admin') {
-          syncFromCloudDb(true);
-        }
-      });
-    }
-
-    // Auto-poll ONLY in admin mode every 60 seconds (fetches ~1~35KB delta only)
-    setInterval(() => {
-      if (CLOUD_DB_URL && currentMode === 'admin') {
-        syncFromCloudDb(true);
-      }
-    }, 60000);
 
     // =========================================================================
     // MEMBER EXPORT & ADMIN MERGE (Offline / Direct Sharing Support)
@@ -1620,30 +1584,37 @@
     // MEMBER MODE: SEARCH & GAONNURI CHECK -> SESSION COUNT & DATES
     // =========================================================================
     function onMemberSearchInput() {
+      // Typing in input does NOT trigger search or network calls; wait for [조회하기] click or Enter
+    }
+
+    async function triggerMemberSearch() {
       const val = (document.getElementById('member-search-input').value || '').trim();
+      if (!val) {
+        showToast('본인의 이름 또는 학번을 입력한 뒤 [조회하기]를 눌러주세요.', 'warn');
+        return;
+      }
       searchedMemberName = val;
       const clearBtn = document.getElementById('member-clear-btn');
-      if (clearBtn) {
-        if (val) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
-      }
+      if (clearBtn) clearBtn.classList.remove('hidden');
 
-      // Persist searched member in URL hash and localStorage so it NEVER resets on reload!
       try {
-        if (val) {
-          localStorage.setItem('gaon_active_search_query', val);
-          history.replaceState(null, '', '#member=' + encodeURIComponent(val));
-        } else {
-          localStorage.removeItem('gaon_active_search_query');
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
+        localStorage.setItem('gaon_active_search_query', val);
+        history.replaceState(null, '', '#member=' + encodeURIComponent(val));
       } catch (e) {}
 
       renderMemberSearchResult();
-    }
 
-    function triggerMemberSearch() {
-      onMemberSearchInput();
+      // Fetch ONLY when user explicitly clicked [조회하기] or pressed Enter
+      const q = val.toLowerCase();
+      let matched = state.members.filter(m => m.name.toLowerCase() === q || m.student_id.toLowerCase() === q);
+      if (matched.length === 0) {
+        matched = state.members.filter(m => m.name.toLowerCase().includes(q) || m.student_id.toLowerCase().includes(q));
+      }
+      if (CLOUD_DB_URL && matched.length >= 1 && matched.length <= 3) {
+        for (const m of matched) {
+          await fetchMemberFromCloudOnSearch(m.student_id);
+        }
+      }
     }
 
     function clearMemberSearch() {
@@ -1685,10 +1656,7 @@
         return;
       }
 
-      // Fetch ONLY the matched member's compact delta (~0.5KB) from Firebase
-      if (CLOUD_DB_URL && matchedMembers.length <= 3) {
-        matchedMembers.forEach(m => syncMemberFromCloud(m.student_id, false));
-      }
+
 
       container.innerHTML = matchedMembers.map(m => {
         const allActs = state.activities.filter(a => a.student_id === m.student_id);
@@ -1756,9 +1724,9 @@
                 </div>
                 <button
                   type="button"
-                  onclick="openMemberSubmitModal('${escapeHtml(m.student_id)}')"
-                  class="rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-black text-white hover:bg-emerald-600 transition shadow-xs">
-                  📤 내 체크 결과 제출
+                  onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
+                  class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 ring-4 ring-amber-300/50 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-4 py-2 text-xs sm:text-sm font-black transition shadow-md">
+                  ${unsavedMemberIds.has(m.student_id) ? '💾 변경사항 저장하기 (필수!)' : savedMemberIds.has(m.student_id) ? '✅ 저장 완료 (💾 다시 저장)' : '💾 체크 완료 후 저장하기'}
                 </button>
                 <button
                   type="button"
@@ -1768,6 +1736,25 @@
                 </button>
               </div>
             </div>
+
+            ${unsavedMemberIds.has(m.student_id) ? `
+              <div class="bg-amber-50 border-b-2 border-amber-300 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-amber-950 text-xs sm:text-sm font-extrabold">
+                  <span class="text-base">⚠️</span>
+                  <span>체크·회차 변경사항이 아직 서버에 저장되지 않았습니다! 모든 체크를 마친 후 우측 <b>[💾 저장하기]</b> 버튼을 꼭 눌러주세요.</span>
+                </div>
+                <button
+                  type="button"
+                  onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
+                  class="rounded-xl bg-emerald-600 px-5 py-2 text-xs sm:text-sm font-black text-white hover:bg-emerald-700 transition shadow-sm shrink-0">
+                  💾 지금 서버에 저장하기
+                </button>
+              </div>
+            ` : savedMemberIds.has(m.student_id) ? `
+              <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm font-extrabold text-emerald-900">
+                <span>✅ 서버(클라우드 DB)에 안전하게 저장되었습니다! 추가로 수정한 경우에만 다시 [저장하기]를 눌러주세요.</span>
+              </div>
+            ` : ''}
 
             <!-- CLARITY SUMMARY BANNER (혼동 완벽 방지 3단계 요약 바) -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-slate-100/90 border-b border-slate-200 text-xs">
@@ -1966,6 +1953,32 @@
                     ${displayedUserActs.map((act, idx) => renderUserSubmittedActivityCard(act, idx + 1)).join('')}
                   </div>
                 `}
+              </div>
+
+              <!-- Sticky Bottom Final Save Bar -->
+              <div class="sticky bottom-3 z-30 mt-6 rounded-2xl border-2 ${unsavedMemberIds.has(m.student_id) ? 'border-amber-400 bg-slate-900/95 ring-4 ring-amber-400/30' : 'border-emerald-500/40 bg-slate-900/95'} p-4 text-white shadow-xl backdrop-blur-xs flex flex-wrap items-center justify-between gap-3">
+                <div class="text-xs sm:text-sm">
+                  ${unsavedMemberIds.has(m.student_id)
+                    ? `<span class="font-black text-amber-300">⚠️ 아직 저장되지 않은 변경사항이 있습니다!</span> <span class="text-slate-200">체크와 회차 입력을 마쳤다면 우측 <b>[저장하기]</b> 버튼을 꼭 눌러주세요.</span>`
+                    : savedMemberIds.has(m.student_id)
+                      ? `<span class="font-black text-emerald-400">✅ 서버(클라우드 DB)에 최종 저장이 완료되었습니다!</span> <span class="text-slate-300">(총 인정: ${m.ssp_total_count}건 · ${m.ssp_meetings}회차)</span>`
+                      : `<span class="font-bold text-slate-200">체크와 회차 설정을 모두 마친 뒤 우측 <b>[💾 최종 저장하기]</b> 버튼을 눌러주세요.</span>`
+                  }
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onclick="openMemberSubmitModal('${escapeHtml(m.student_id)}')"
+                    class="rounded-xl border border-slate-600 bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition">
+                    📋 코드 복사(비상용)
+                  </button>
+                  <button
+                    type="button"
+                    onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
+                    class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-6 py-2.5 text-sm sm:text-base font-black transition shadow-md">
+                    ${unsavedMemberIds.has(m.student_id) ? '💾 체크 완료! 서버에 최종 저장하기' : savedMemberIds.has(m.student_id) ? '✅ 저장 완료 (다시 저장)' : '💾 내 실적 최종 저장하기'}
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -2634,11 +2647,17 @@
       return `
         <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3.5">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-extrabold text-white">전체 통계값 요약 (가온누리 체크 인정 실적 기준)</span>
               <span class="text-xs text-slate-500">
                 전체 동아리원 <b>${totalMembersCount}명</b> (CSV 보유 ${csvActiveMembersCount}명 / 가온누리 실적 체크 완료 <b>${checkedMembersCount}명</b> / 현재 표 표시 ${targetMembers.length}명)
               </span>
+              <button
+                type="button"
+                onclick="syncFromCloudDb(false)"
+                class="rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-black text-white hover:bg-blue-700 transition shadow-xs">
+                🔄 클라우드에서 회원 저장 현황 새로고침
+              </button>
             </div>
             <div class="flex flex-wrap items-center gap-3 text-xs font-semibold">
               <span class="text-blue-700">가온누리 실적 3건 이상 인정 회원: <b>${threePlusMembersCount}명</b></span>
@@ -3019,7 +3038,7 @@
     function jumpToMemberEdit(name) {
       switchMode('member');
       document.getElementById('member-search-input').value = name;
-      onMemberSearchInput();
+      triggerMemberSearch();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -3372,12 +3391,11 @@
     }
 
     function initApp() {
-      // 1. Synchronous initial load from localStorage (Zero initial Firebase download before search!)
+      // 1. Synchronous initial load from localStorage (ZERO Firebase calls on page load!)
       loadState();
       updateCloudDbStatusUI(Boolean(CLOUD_DB_URL));
-      if (CLOUD_DB_URL) migrateLocalModifiedToCloudV2();
 
-      // 2. RESTORE SEARCHED MEMBER SYNCHRONOUSLY! (Zero flicker on refresh)
+      // 2. Pre-fill search input if available, but wait for user to click [조회하기]
       let initQuery = '';
       try {
         const hash = (window.location && window.location.hash) || '';
@@ -3395,15 +3413,9 @@
       } catch (e) {}
 
       if (initQuery) {
-        searchedMemberName = initQuery.trim();
         const input = document.getElementById('member-search-input');
-        if (input) input.value = searchedMemberName;
-        const clearBtn = document.getElementById('member-clear-btn');
-        if (clearBtn) clearBtn.classList.remove('hidden');
+        if (input) input.value = initQuery.trim();
       }
-
-      // Render search result immediately
-      renderMemberSearchResult();
       updateDbStatusBadge('local');
 
       // 3. Restore Admin Auth if session exists
