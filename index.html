@@ -150,13 +150,31 @@
           </div>
         </div>
 
-        <div class="mt-5 flex flex-wrap items-center gap-2">
+        <!-- 3-Step Cost-Minimized Architecture Banner -->
+        <div class="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 text-xs text-emerald-950 space-y-1">
+          <div class="font-black text-emerald-900 flex items-center gap-1.5">
+            <span>⚡ DB 비용 최소화 3단계 설계 적용됨 (회원당 읽기 1회 · 쓰기 1회 제한)</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
+              <b class="text-emerald-800">1️⃣ 엔터 키 기반 단일 조회:</b> 이름 타이핑 완료 후 <b>Enter</b>를 쳤을 때만 단 1회 조회 쿼리 발생
+            </div>
+            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
+              <b class="text-emerald-800">2️⃣ 번호 배열 쉼표 입력:</b> 체크박스 대신 번호(예: <code class="font-mono font-bold">1, 3, 5</code>)를 입력받아 <b>메모리에만 임시 캐싱</b> (DB 호출 0회)
+            </div>
+            <div class="rounded-lg bg-white/90 border border-emerald-200 px-2.5 py-1.5">
+              <b class="text-emerald-800">3️⃣ 트랜잭션 일괄 쓰기:</b> 마지막 확인(<b>Y/n</b>) 후 선택된 실적을 <b>Batch Write로 묶어 단 1회 DB 쓰기</b>만 발생
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-2">
           <div class="relative flex-1 min-w-[240px]">
             <input
               id="member-search-input"
               type="text"
-              onkeydown="if(event.key==='Enter') triggerMemberSearch()"
-              placeholder="본인의 이름 또는 학번을 다 입력한 뒤 [조회하기] 버튼을 눌러주세요"
+              onkeydown="if(event.key==='Enter'){ event.preventDefault(); triggerMemberSearch(); }"
+              placeholder="본인의 이름 또는 학번을 타이핑한 후 [Enter(엔터)] 키를 치세요 (단일 조회)"
               class="w-full rounded-xl border-2 border-slate-300 bg-white pl-10 pr-4 py-3 text-base font-semibold text-slate-900 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
             />
             <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
@@ -164,7 +182,7 @@
           <button
             onclick="triggerMemberSearch()"
             class="rounded-xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-sm hover:bg-blue-700 transition">
-            조회하기
+            ↵ 엔터(Enter) 단일 조회
           </button>
           <button
             id="member-clear-btn"
@@ -791,8 +809,181 @@
       }
     }
 
-    // Called ONLY when user explicitly clicks [💾 저장하기] button!
-    async function saveMemberToCloud(studentId) {
+    let pendingBatchWriteStudentId = null;
+
+    // STEP 2: Parse comma-separated numbers (e.g. "1, 3, 5") and cache in memory ONLY (0 DB writes!)
+    function applyBatchNumberSelection(studentId) {
+      const inp = document.getElementById('batch-number-input-' + studentId);
+      if (!inp) return;
+      const raw = (inp.value || '').trim();
+      const allActs = state.activities.filter(a => a.student_id === studentId);
+      const userActs = allActs.filter(a => !isOfficialActivity(a));
+
+      if (userActs.length === 0) {
+        showToast('선택할 수 있는 개별 제출 실적이 없습니다.', 'warn');
+        return;
+      }
+
+      const chosenSet = new Set();
+      const invalidTokens = [];
+      if (raw !== '' && raw !== '0' && raw.toLowerCase() !== 'none') {
+        const tokens = raw.split(/[,，\s]+/).map(t => t.trim()).filter(Boolean);
+        tokens.forEach(tok => {
+          const num = Number(tok);
+          if (!Number.isInteger(num) || num < 1 || num > userActs.length) {
+            invalidTokens.push(tok);
+          } else {
+            chosenSet.add(num);
+          }
+        });
+      }
+
+      if (invalidTokens.length > 0) {
+        showToast(`⚠️ 유효하지 않은 번호(${invalidTokens.join(', ')}) 제외됨 — 1 ~ ${userActs.length} 사이의 번호만 입력해 주세요.`, 'warn');
+      }
+
+      const nowIso = new Date().toISOString();
+      userActs.forEach((act, idx) => {
+        const itemNo = idx + 1;
+        const shouldSelect = chosenSet.has(itemNo);
+        if (Boolean(act.is_gaon_checked) !== shouldSelect) {
+          act.is_gaon_checked = shouldSelect;
+          act.user_modified = true;
+          act.last_modified_at = nowIso;
+          normalizeActivityEndpoints(act);
+        }
+      });
+
+      unsavedMemberIds.add(studentId);
+      savedMemberIds.delete(studentId);
+      const m = state.members.find(x => x.student_id === studentId);
+      const chosenArr = Array.from(chosenSet).sort((a, b) => a - b);
+      saveState(`${m ? m.name : studentId} 회원이 번호 배열 [${chosenArr.length > 0 ? chosenArr.join(', ') : '없음'}] (${chosenArr.length}건)을 메모리에 임시 캐싱했습니다.`);
+      renderAfterDataChange();
+      showToast(`📥 번호 [${chosenArr.length > 0 ? chosenArr.map(n => n + '번').join(', ') : '전체 해제'}] 메모리에 임시 캐싱 완료! (DB 쓰기 0회 · 하단에서 회차 확인 후 Batch Write를 실행하세요)`);
+    }
+
+    function selectAllTeamCandidatesInMemory(studentId) {
+      const allActs = state.activities.filter(a => a.student_id === studentId);
+      const userActs = allActs.filter(a => !isOfficialActivity(a));
+      const teamNums = [];
+      userActs.forEach((act, idx) => {
+        if (act.csv_team_candidate || act.team_type === '팀') {
+          teamNums.push(idx + 1);
+        }
+      });
+      const inp = document.getElementById('batch-number-input-' + studentId);
+      if (inp) {
+        inp.value = teamNums.join(', ');
+        applyBatchNumberSelection(studentId);
+      }
+    }
+
+    // STEP 3: Open final confirmation (Y/n) modal before executing single Batch Write
+    function openBatchWriteConfirmModal(studentId) {
+      const m = state.members.find(x => x.student_id === studentId);
+      if (!m) return;
+      pendingBatchWriteStudentId = studentId;
+
+      const allActs = state.activities.filter(a => a.student_id === studentId);
+      const officialActs = allActs.filter(a => isOfficialActivity(a) && a.is_gaon_checked);
+      const userActs = allActs.filter(a => !isOfficialActivity(a));
+      const selectedPairs = [];
+      userActs.forEach((act, idx) => {
+        if (act.is_gaon_checked) {
+          selectedPairs.push({ num: idx + 1, act });
+        }
+      });
+
+      const summaryEl = document.getElementById('batch-confirm-summary-body');
+      if (summaryEl) {
+        const numsText = selectedPairs.length > 0 ? selectedPairs.map(p => p.num + '번').join(', ') : '없음 (0건)';
+        const rowsHtml = selectedPairs.length === 0
+          ? `<div class="rounded-lg bg-slate-100 p-3 text-center text-xs text-slate-600">선택된 개별 제출 실적이 없습니다. (공식 정기 활동 ${officialActs.length}건만 반영됩니다)</div>`
+          : selectedPairs.map(p => {
+              const ev = getEvalPeriodStatus(p.act);
+              return `
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border ${ev.hasWarning ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'} px-3 py-2 text-xs">
+                  <div class="font-bold text-slate-900">
+                    <span class="inline-block rounded bg-blue-600 px-1.5 py-0.5 text-[11px] font-black text-white mr-1">#${p.num}번</span>
+                    [${escapeHtml(p.act.gaon_category)}] ${escapeHtml(p.act.title)}
+                  </div>
+                  <div class="font-mono text-[11px] font-semibold text-slate-700">
+                    동아리원 ${p.act.gaon_member_count}명 · <b>${p.act.meeting_count}회차</b> (${escapeHtml(p.act.first_session_date)} ~ ${escapeHtml(p.act.last_session_date)})
+                    ${ev.hasWarning ? `<span class="text-amber-700 font-bold ml-1">⚠️기간외</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('');
+
+        summaryEl.innerHTML = `
+          <div class="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-1.5 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-extrabold text-blue-950">👤 대상 회원: ${escapeHtml(m.name)} (${escapeHtml(m.student_id)})</span>
+              <span class="rounded-full bg-blue-600 px-2.5 py-0.5 text-[11px] font-black text-white">Batch Write 1회 묶음</span>
+            </div>
+            <div class="text-slate-700">
+              • <b>선택 번호 배열:</b> <code class="bg-white px-1.5 py-0.5 rounded border border-blue-200 font-mono font-black text-blue-800">[${numsText}]</code> (개별 ${selectedPairs.length}건 + 공식 활동 ${officialActs.length}건)
+            </div>
+            <div class="text-slate-700">
+              • <b>가온누리 총 인정 합계:</b> <b class="text-emerald-700">총 ${m.ssp_total_count}건 · ${m.ssp_meetings}회차</b>
+            </div>
+          </div>
+          <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            ${rowsHtml}
+          </div>
+        `;
+      }
+
+      const ynInput = document.getElementById('batch-confirm-yn-input');
+      if (ynInput) ynInput.value = '';
+
+      const modal = document.getElementById('batch-write-confirm-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => ynInput?.focus(), 50);
+      } else {
+        // Fallback for headless test environments without modal DOM
+        executeBatchWriteToCloud(studentId);
+      }
+    }
+
+    function closeBatchWriteConfirmModal() {
+      pendingBatchWriteStudentId = null;
+      document.getElementById('batch-write-confirm-modal')?.classList.add('hidden');
+    }
+
+    function handleBatchConfirmYnInputKey(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitBatchConfirmYn();
+      }
+    }
+
+    function submitBatchConfirmYn(forcedVal) {
+      const inp = document.getElementById('batch-confirm-yn-input');
+      const val = (forcedVal !== undefined ? forcedVal : (inp ? inp.value : '')).trim().toLowerCase();
+      if (val === 'y' || val === 'yes' || val === '네' || val === '예') {
+        const sid = pendingBatchWriteStudentId;
+        closeBatchWriteConfirmModal();
+        if (sid) executeBatchWriteToCloud(sid);
+      } else if (val === 'n' || val === 'no' || val === '아니오') {
+        closeBatchWriteConfirmModal();
+        showToast('일괄 쓰기(Batch Write)가 취소되었습니다. 메모리 캐시 상태는 그대로 유지됩니다.');
+      } else {
+        showToast('확인은 Y (또는 y), 취소는 n 을 입력해 주세요.', 'warn');
+      }
+    }
+
+    function saveMemberToCloud(studentId, skipConfirm = false) {
+      if (skipConfirm) {
+        return executeBatchWriteToCloud(studentId);
+      }
+      openBatchWriteConfirmModal(studentId);
+    }
+
+    // Executes the actual single transaction/batch write to Firebase (1 DB write only!)
+    async function executeBatchWriteToCloud(studentId) {
       const m = state.members.find(x => x.student_id === studentId);
       const memberName = m ? m.name : studentId;
 
@@ -1918,16 +2109,46 @@
                     </div>
                   </div>
 
-                  <!-- Instruction Box -->
-                  <div class="mt-3.5 rounded-xl border border-blue-200 bg-white p-3.5 text-xs text-slate-700 space-y-1.5">
-                    <div>
-                      <b class="text-blue-900 font-extrabold">📌 가온누리 실적 인정 기준:</b>
-                      우리 동아리 회원이 본인 포함 <b>최소 2명 이상 함께 참여한 활동</b>만 실적으로 인정됩니다.
+                  <!-- STEP 2: 번호 배열 쉼표 입력 (체크박스 대체 · 메모리 임시 캐싱) -->
+                  <div class="mt-3.5 rounded-2xl border-2 border-blue-600 bg-blue-50/70 p-4 text-xs text-slate-800 space-y-3 shadow-xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex items-center gap-2">
+                        <span class="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-black text-white">STEP 2 · 번호 배열 입력 (메모리 캐싱)</span>
+                        <b class="text-blue-950 text-xs sm:text-sm font-extrabold">체크박스 대신 인정받을 실적 번호를 쉼표(,)로 입력해 메모리에 임시 저장하세요</b>
+                      </div>
+                      <span class="rounded-full bg-white border border-blue-300 px-3 py-1 text-xs font-black text-blue-800">
+                        메모리 캐싱된 번호: ${
+                          userActs.map((a, i) => a.is_gaon_checked ? (i + 1) + '번' : null).filter(Boolean).join(', ') || '없음 (0건)'
+                        }
+                      </span>
                     </div>
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
-                      <span><b>1️⃣ 좌측 STEP 1:</b> 동아리원 2명 이상 참여 실적에 체크(☑)</span>
-                      <span><b>2️⃣ 우측 STEP 2:</b> 실적 구분(스터디/세미나/프로젝트) 및 모임 회차·일정 설정</span>
-                      <span><b>💡 안내:</b> CSV에서 동아리원이 감지된 실적은 파란색 배너가 표시됩니다.</span>
+
+                    <div class="text-[11px] sm:text-xs text-slate-600 leading-relaxed">
+                      • 아래 제출 실적 목록(<b>#1번 ~ #${userActs.length}번</b>) 중 <b>본인 포함 우리 동아리원이 2명 이상 함께 참여한 실적 번호</b>를 쉼표로 구분해 입력한 뒤 <b>Enter</b>(또는 캐싱 적용 버튼)를 누르세요.<br/>
+                      • 이 단계에서는 <b>DB 쓰기가 전혀 발생하지 않으며(0회)</b> 브라우저 메모리에만 캐싱됩니다. (전체 해제 시 <code class="bg-white px-1 rounded border">0</code> 입력)
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                      <input
+                        id="batch-number-input-${escapeHtml(m.student_id)}"
+                        type="text"
+                        value="${escapeHtml(userActs.map((a, i) => a.is_gaon_checked ? (i + 1) : null).filter(Boolean).join(', '))}"
+                        onkeydown="if(event.key==='Enter'){ event.preventDefault(); applyBatchNumberSelection('${escapeHtml(m.student_id)}'); }"
+                        placeholder="예: 1, 2, 4 (인정받을 실적 번호를 쉼표로 입력 후 Enter)"
+                        class="flex-1 min-w-[240px] rounded-xl border-2 border-blue-500 bg-white px-4 py-2.5 font-mono text-sm sm:text-base font-black text-slate-900 outline-none focus:border-blue-700 focus:ring-4 focus:ring-blue-100"
+                      />
+                      <button
+                        type="button"
+                        onclick="applyBatchNumberSelection('${escapeHtml(m.student_id)}')"
+                        class="rounded-xl bg-blue-600 px-5 py-2.5 text-xs sm:text-sm font-black text-white hover:bg-blue-700 transition shadow-sm shrink-0">
+                        📥 번호 배열 메모리 캐싱 (Enter)
+                      </button>
+                      <button
+                        type="button"
+                        onclick="selectAllTeamCandidatesInMemory('${escapeHtml(m.student_id)}')"
+                        class="rounded-xl border border-blue-300 bg-white px-3.5 py-2.5 text-xs font-bold text-blue-800 hover:bg-blue-100 transition shrink-0">
+                        ⚡ 팀 감지 번호 자동입력
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1950,7 +2171,7 @@
                   </div>
                 ` : `
                   <div class="space-y-4">
-                    ${displayedUserActs.map((act, idx) => renderUserSubmittedActivityCard(act, idx + 1)).join('')}
+                    ${displayedUserActs.map((act) => renderUserSubmittedActivityCard(act, userActs.indexOf(act) + 1)).join('')}
                   </div>
                 `}
               </div>
@@ -1976,7 +2197,7 @@
                     type="button"
                     onclick="saveMemberToCloud('${escapeHtml(m.student_id)}')"
                     class="rounded-xl ${unsavedMemberIds.has(m.student_id) ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 animate-pulse' : 'bg-emerald-500 text-white hover:bg-emerald-600'} px-6 py-2.5 text-sm sm:text-base font-black transition shadow-md">
-                    ${unsavedMemberIds.has(m.student_id) ? '💾 체크 완료! 서버에 최종 저장하기' : savedMemberIds.has(m.student_id) ? '✅ 저장 완료 (다시 저장)' : '💾 내 실적 최종 저장하기'}
+                    ${unsavedMemberIds.has(m.student_id) ? '💾 STEP 3. 확인(Y/n) 후 일괄 쓰기 (Batch Write)' : savedMemberIds.has(m.student_id) ? '✅ Batch Write 완료 (다시 저장)' : '💾 STEP 3. 확인(Y/n) 후 일괄 쓰기 (Batch Write)'}
                   </button>
                 </div>
               </div>
@@ -2310,59 +2531,53 @@
                 </div>
               </div>
 
-              <!-- STEP 1: 가온누리 실적으로 칠 수 있는지 체크 -->
+              <!-- 번호 배열 캐싱 상태 표시 (체크박스 대신 상단 번호 배열 입력으로 제어) -->
               <div class="mt-4 pt-3 border-t border-slate-200/80">
-                <label
-                  class="flex items-start gap-3 rounded-xl border-2 p-3.5 cursor-pointer transition select-none ${
+                <div
+                  class="flex items-center justify-between gap-3 rounded-xl border-2 p-3.5 ${
                     isChecked
                       ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                      : 'border-slate-300 bg-white hover:border-blue-500 hover:bg-blue-50/40 text-slate-900'
+                      : 'border-slate-300 bg-white text-slate-800'
                   }">
-                  <input
-                    type="checkbox"
-                    ${isChecked ? 'checked' : ''}
-                    onchange="toggleGaonValid('${act.id}', this.checked)"
-                    class="mt-0.5 h-5 w-5 rounded accent-white cursor-pointer shrink-0"
-                  />
-                  <div class="flex-1 text-left">
-                    <div class="text-xs sm:text-sm font-extrabold leading-snug">
-                      ${isChecked
-                        ? '✅ 가온누리 실적으로 인정 체크됨 (본인 포함 동아리원 2명 이상)'
-                        : 'STEP 1. 가온누리 실적으로 체크하기 (본인 포함 동아리원 최소 2명 이상)'}
-                    </div>
-                    <div class="mt-0.5 text-[11px] ${isChecked ? 'text-blue-100' : 'text-slate-500'}">
-                      ${isChecked
-                        ? '우측에서 활동 구분(스터디/세미나/프로젝트)과 모임 회차·날짜를 설정하세요.'
-                        : '우리 동아리 인원이 본인 포함 최소 2명 이상 함께한 실적이라면 여기를 체크해 주세요.'}
+                  <div class="flex items-center gap-2.5">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg font-mono text-sm font-black shrink-0 ${
+                      isChecked ? 'bg-white text-blue-700' : 'bg-slate-900 text-white'
+                    }">
+                      #${indexNo}
+                    </span>
+                    <div class="text-left">
+                      <div class="text-xs sm:text-sm font-extrabold leading-snug">
+                        ${isChecked
+                          ? `✅ [${indexNo}번] 메모리 캐싱 선택됨 (Batch Write 대상)`
+                          : `⬜ [${indexNo}번] 미선택 (상단 번호 입력창에 '${indexNo}' 입력)`}
+                      </div>
+                      <div class="mt-0.5 text-[11px] ${isChecked ? 'text-blue-100' : 'text-slate-500'}">
+                        ${isChecked
+                          ? '우측에서 실적 구분과 모임 회차·일정을 확인한 뒤 하단 [일괄 쓰기]를 진행하세요.'
+                          : '인정받을 실적이라면 상단 번호 배열 입력창에 번호를 쉼표(,)로 입력해 주세요.'}
+                      </div>
                     </div>
                   </div>
-                </label>
+                </div>
               </div>
             </div>
 
-            <!-- RIGHT (7 cols): STEP 2 체크한 뒤 해당 실적을 몇 회차 가졌는지 설정 -->
+            <!-- RIGHT (7 cols): 메모리에 캐싱된 번호만 회차/날짜 설정 활성화 -->
             <div class="lg:col-span-7 p-4 sm:p-5 bg-white flex flex-col justify-center">
               ${!isChecked ? `
-                <!-- UNCHECKED STATE: Locked until STEP 1 is checked -->
-                <div class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-6 text-center space-y-3 my-auto">
-                  <div class="flex h-11 w-11 items-center justify-center rounded-full bg-slate-200/80 text-xl">
-                    🔒
+                <!-- UNSELECTED STATE: Controlled via Batch Number Input -->
+                <div class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-6 text-center space-y-2 my-auto">
+                  <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200/80 font-mono text-sm font-black text-slate-700">
+                    #${indexNo}
                   </div>
                   <div class="space-y-1 max-w-md">
                     <div class="text-sm font-extrabold text-slate-800">
-                      가온누리 실적으로 먼저 체크한 뒤 모임 회차를 설정할 수 있습니다
+                      상단 [STEP 2 · 번호 배열 입력창]에 <code class="text-blue-600 font-mono">${indexNo}</code>번을 입력하면 활성화됩니다
                     </div>
                     <p class="text-xs text-slate-500 leading-relaxed">
-                      본인 포함 우리 동아리 인원이 <b>최소 2명 이상</b> 참여한 실적이라면,
-                      좌측의 체크박스를 누르거나 아래 버튼을 눌러 <b>가온누리 실적으로 체크</b>해 주세요.
+                      개별 체크박스 대신 상단 입력창에 번호를 쉼표로 입력(예: <b>1, 2, 4</b>)하여 메모리에 임시 캐싱한 뒤, 마지막 확인(Y/n)을 거쳐 일괄 저장합니다.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onclick="toggleGaonValid('${act.id}', true)"
-                    class="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-xs hover:bg-blue-700 transition">
-                    ☑ 가온누리 실적으로 체크하고 회차 설정 열기
-                  </button>
                 </div>
               ` : `
                 <!-- CHECKED STATE: Unlocked! Configure Category, Club Member Count, Total Sessions & Dates -->
@@ -3598,6 +3813,54 @@
 
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
         <button type="button" onclick="closeSubmitShareModal()" class="rounded-lg bg-slate-200 px-4 py-1.5 text-xs font-bold text-slate-700">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: STEP 3 트랜잭션 기반 일괄 쓰기 (Batch Write) 마지막 확인 (Y/n) -->
+  <!-- ========================================================================= -->
+  <div id="batch-write-confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+      <div class="flex items-start justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-xl font-bold text-emerald-700">💾</span>
+          <div>
+            <h3 class="text-base font-black text-slate-900">STEP 3 · 트랜잭션 기반 일괄 쓰기 (Batch Write) 확인</h3>
+            <p class="text-xs text-slate-500">메모리에 캐싱된 실적을 단 1회의 DB 쓰기로 일괄 저장합니다.</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeBatchWriteConfirmModal()" class="rounded-lg p-1 text-slate-400 hover:bg-slate-100">✕</button>
+      </div>
+
+      <div id="batch-confirm-summary-body" class="space-y-3"></div>
+
+      <div class="rounded-xl border-2 border-slate-900 bg-slate-50 p-3.5 space-y-2">
+        <label class="block text-xs font-black text-slate-900">
+          ⌨️ 마지막 확인 (Y/n): 위 내역을 Batch Write로 일괄 저장하시겠습니까?
+        </label>
+        <div class="flex items-center gap-2">
+          <input
+            id="batch-confirm-yn-input"
+            type="text"
+            maxlength="3"
+            onkeydown="handleBatchConfirmYnInputKey(event)"
+            placeholder="Y 또는 n 입력 후 Enter"
+            class="w-44 rounded-xl border-2 border-slate-400 bg-white px-3.5 py-2 font-mono text-sm font-black text-slate-900 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+          />
+          <button
+            type="button"
+            onclick="submitBatchConfirmYn('y')"
+            class="flex-1 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs sm:text-sm font-black text-white hover:bg-emerald-700 transition shadow-sm">
+            [Y] 확인 · Batch Write 실행 (DB 쓰기 1회)
+          </button>
+          <button
+            type="button"
+            onclick="submitBatchConfirmYn('n')"
+            class="rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
+            [n] 취소
+          </button>
+        </div>
       </div>
     </div>
   </div>
