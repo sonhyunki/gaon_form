@@ -224,6 +224,11 @@
               + 가온누리 실적 추가
             </button>
             <button
+              onclick="openC1ExcelModal()"
+              class="rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-black text-slate-950 hover:bg-amber-400 transition shadow-sm">
+              📊 참여현황 [C-1] 엑셀 생성
+            </button>
+            <button
               onclick="exportAdminSummaryCSV()"
               class="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-500 transition">
               📥 회원별 요약표 CSV 다운로드
@@ -3528,6 +3533,398 @@
       downloadCsv('가온누리_전체실적_체크_및_회차날짜_상세내역.csv', rows);
     }
 
+    // =========================================================================
+    // C-1 PARTICIPATION SUMMARY EXCEL (.XLSX) GENERATOR & PREVIEW MODAL
+    // - Format: 가. 회원별 참여 현황[C-1] (2-column side-by-side table, descending by meetings)
+    // - Generates a native OOXML .xlsx file in pure JS (zero external dependencies)
+    // =========================================================================
+    function getC1SortedMembers(onlyActive = true) {
+      recalcAll();
+      let list = state.members.slice();
+      if (onlyActive) {
+        list = list.filter(m => (m.ssp_meetings || 0) > 0);
+      }
+      list.sort((a, b) => {
+        const diff = (b.ssp_meetings || 0) - (a.ssp_meetings || 0);
+        if (diff !== 0) return diff;
+        if ((b.ssp_total_count || 0) !== (a.ssp_total_count || 0)) {
+          return (b.ssp_total_count || 0) - (a.ssp_total_count || 0);
+        }
+        return String(a.name || '').localeCompare(String(b.name || ''), 'ko');
+      });
+      return list;
+    }
+
+    function buildC1TableModel(onlyActive = true) {
+      const list = getC1SortedMembers(onlyActive);
+      const half = Math.ceil(list.length / 2);
+      const rows = [];
+      for (let i = 0; i < half; i++) {
+        const left = list[i];
+        const right = list[half + i] || null;
+        rows.push({
+          leftNo: i + 1,
+          left,
+          rightNo: right ? (half + i + 1) : null,
+          right
+        });
+      }
+      const totalMembers = list.length;
+      const totalMeetings = list.reduce((s, m) => s + (m.ssp_meetings || 0), 0);
+      const avgMeetings = totalMembers > 0 ? (totalMeetings / totalMembers).toFixed(1) : '0.0';
+      const summaryText = `활동회원 ${totalMembers}명 / 참여 횟수 합계 ${totalMeetings}회 / 1인당 평균 ${avgMeetings}회`;
+      return { list, half, rows, totalMembers, totalMeetings, avgMeetings, summaryText };
+    }
+
+    function openC1ExcelModal() {
+      const modal = document.getElementById('c1-excel-modal');
+      if (!modal) return;
+      renderC1ExcelPreview();
+      modal.classList.remove('hidden');
+    }
+
+    function closeC1ExcelModal() {
+      document.getElementById('c1-excel-modal')?.classList.add('hidden');
+    }
+
+    function renderC1ExcelPreview() {
+      const onlyActive = document.getElementById('c1-only-active-chk')?.checked ?? true;
+      const model = buildC1TableModel(onlyActive);
+      const wrap = document.getElementById('c1-excel-preview-wrap');
+      if (!wrap) return;
+
+      const bodyRowsHtml = model.rows.length === 0
+        ? `<tr><td colspan="8" class="border border-slate-900 py-8 text-center text-xs text-slate-500">표시할 회원이 없습니다.</td></tr>`
+        : model.rows.map(r => {
+            const lGrade = (r.left.grade && r.left.grade !== '미입력') ? r.left.grade : '-';
+            const rGrade = r.right ? ((r.right.grade && r.right.grade !== '미입력') ? r.right.grade : '-') : '';
+            return `
+              <tr class="hover:bg-slate-50">
+                <td class="border border-slate-900 px-2 py-1.5 text-center tabular-nums">${r.leftNo}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center font-semibold">${escapeHtml(r.left.name)}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center tabular-nums">${escapeHtml(lGrade)}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center font-bold text-blue-800 tabular-nums">${r.left.ssp_meetings}회</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center tabular-nums">${r.rightNo !== null ? r.rightNo : ''}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center font-semibold">${r.right ? escapeHtml(r.right.name) : ''}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center tabular-nums">${escapeHtml(rGrade)}</td>
+                <td class="border border-slate-900 px-2 py-1.5 text-center font-bold text-blue-800 tabular-nums">${r.right ? `${r.right.ssp_meetings}회` : ''}</td>
+              </tr>
+            `;
+          }).join('');
+
+      wrap.innerHTML = `
+        <div class="space-y-2">
+          <div class="text-sm sm:text-base font-black text-slate-950">가. 회원별 참여 현황[C-1]</div>
+          <table id="c1-preview-table" class="w-full border-collapse border-2 border-slate-950 text-xs text-slate-900 bg-white">
+            <thead>
+              <tr class="bg-slate-200 font-black" style="border-bottom: 3px double #0f172a;">
+                <th class="border border-slate-900 px-2 py-2 text-center w-12">번호</th>
+                <th class="border border-slate-900 px-2 py-2 text-center">성명</th>
+                <th class="border border-slate-900 px-2 py-2 text-center w-14">학년</th>
+                <th class="border border-slate-900 px-2 py-2 text-center w-20">참여 횟수</th>
+                <th class="border border-slate-900 px-2 py-2 text-center w-12">번호</th>
+                <th class="border border-slate-900 px-2 py-2 text-center">성명</th>
+                <th class="border border-slate-900 px-2 py-2 text-center w-14">학년</th>
+                <th class="border border-slate-900 px-2 py-2 text-center w-20">참여 횟수</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bodyRowsHtml}
+              <tr class="bg-slate-100 font-black">
+                <td class="border border-slate-900 px-2 py-2 text-center">합계</td>
+                <td colspan="7" class="border border-slate-900 px-3 py-2 text-center">${escapeHtml(model.summaryText)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function escapeXml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    }
+
+    function xlsxCrc32(bytes) {
+      let crc = 0xFFFFFFFF;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= bytes[i];
+        for (let j = 0; j < 8; j++) {
+          crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+        }
+      }
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function buildZipArchive(entries) {
+      const encoder = new TextEncoder();
+      const localParts = [];
+      const centralParts = [];
+      let offset = 0;
+
+      entries.forEach(entry => {
+        const nameBytes = encoder.encode(entry.name);
+        const dataBytes = entry.bytes;
+        const crc = xlsxCrc32(dataBytes);
+
+        // Local file header (30 bytes + name)
+        const lh = new Uint8Array(30 + nameBytes.length);
+        const lv = new DataView(lh.buffer);
+        lv.setUint32(0, 0x04034b50, true);
+        lv.setUint16(4, 20, true);
+        lv.setUint16(6, 0x0800, true); // UTF-8 flag
+        lv.setUint16(8, 0, true);      // STORE (no compression)
+        lv.setUint16(10, 0, true);
+        lv.setUint16(12, 0x5421, true);
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, dataBytes.length, true);
+        lv.setUint32(22, dataBytes.length, true);
+        lv.setUint16(26, nameBytes.length, true);
+        lv.setUint16(28, 0, true);
+        lh.set(nameBytes, 30);
+
+        localParts.push(lh, dataBytes);
+
+        // Central directory header (46 bytes + name)
+        const ch = new Uint8Array(46 + nameBytes.length);
+        const cv = new DataView(ch.buffer);
+        cv.setUint32(0, 0x02014b50, true);
+        cv.setUint16(4, 20, true);
+        cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0x0800, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true);
+        cv.setUint16(14, 0x5421, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, dataBytes.length, true);
+        cv.setUint32(24, dataBytes.length, true);
+        cv.setUint16(28, nameBytes.length, true);
+        cv.setUint16(30, 0, true);
+        cv.setUint16(32, 0, true);
+        cv.setUint16(34, 0, true);
+        cv.setUint16(36, 0, true);
+        cv.setUint32(38, 0, true);
+        cv.setUint32(42, offset, true);
+        ch.set(nameBytes, 46);
+
+        centralParts.push(ch);
+        offset += lh.length + dataBytes.length;
+      });
+
+      const centralSize = centralParts.reduce((s, p) => s + p.length, 0);
+      const eocd = new Uint8Array(22);
+      const ev = new DataView(eocd.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(4, 0, true);
+      ev.setUint16(6, 0, true);
+      ev.setUint16(8, entries.length, true);
+      ev.setUint16(10, entries.length, true);
+      ev.setUint32(12, centralSize, true);
+      ev.setUint32(16, offset, true);
+      ev.setUint16(20, 0, true);
+
+      const totalLen = offset + centralSize + eocd.length;
+      const out = new Uint8Array(totalLen);
+      let pos = 0;
+      localParts.forEach(p => { out.set(p, pos); pos += p.length; });
+      centralParts.forEach(p => { out.set(p, pos); pos += p.length; });
+      out.set(eocd, pos);
+      return out;
+    }
+
+    function buildC1XlsxBytes(onlyActive = true) {
+      const model = buildC1TableModel(onlyActive);
+      const colNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+      const strCell = (ref, val, styleId) =>
+        `<c r="${ref}" t="inlineStr" s="${styleId}"><is><t>${escapeXml(val)}</t></is></c>`;
+      const numCell = (ref, val, styleId) =>
+        `<c r="${ref}" t="n" s="${styleId}"><v>${Number(val)}</v></c>`;
+      const emptyCell = (ref, styleId) =>
+        `<c r="${ref}" s="${styleId}"/>`;
+
+      const rowXmlList = [];
+
+      // Row 1: Title row (A1:H1 merged)
+      rowXmlList.push(
+        `<row r="1" ht="26" customHeight="1">` +
+        strCell('A1', '가. 회원별 참여 현황[C-1]', 1) +
+        colNames.slice(1).map(c => emptyCell(c + '1', 1)).join('') +
+        `</row>`
+      );
+
+      // Row 2: Header row
+      const headers = ['번호', '성명', '학년', '참여 횟수', '번호', '성명', '학년', '참여 횟수'];
+      rowXmlList.push(
+        `<row r="2" ht="24" customHeight="1">` +
+        headers.map((h, idx) => strCell(colNames[idx] + '2', h, 2)).join('') +
+        `</row>`
+      );
+
+      // Data Rows
+      model.rows.forEach((r, idx) => {
+        const rowNum = 3 + idx;
+        const lGradeStr = (r.left.grade && r.left.grade !== '미입력') ? String(r.left.grade).trim() : '-';
+        const lGradeCell = /^\d+$/.test(lGradeStr)
+          ? numCell('C' + rowNum, lGradeStr, 3)
+          : strCell('C' + rowNum, lGradeStr, 3);
+
+        let cells = [
+          numCell('A' + rowNum, r.leftNo, 3),
+          strCell('B' + rowNum, r.left.name || '', 3),
+          lGradeCell,
+          strCell('D' + rowNum, `${r.left.ssp_meetings || 0}회`, 3)
+        ];
+
+        if (r.right) {
+          const rGradeStr = (r.right.grade && r.right.grade !== '미입력') ? String(r.right.grade).trim() : '-';
+          const rGradeCell = /^\d+$/.test(rGradeStr)
+            ? numCell('G' + rowNum, rGradeStr, 3)
+            : strCell('G' + rowNum, rGradeStr, 3);
+          cells.push(
+            numCell('E' + rowNum, r.rightNo, 3),
+            strCell('F' + rowNum, r.right.name || '', 3),
+            rGradeCell,
+            strCell('H' + rowNum, `${r.right.ssp_meetings || 0}회`, 3)
+          );
+        } else {
+          cells.push(
+            emptyCell('E' + rowNum, 3),
+            emptyCell('F' + rowNum, 3),
+            emptyCell('G' + rowNum, 3),
+            emptyCell('H' + rowNum, 3)
+          );
+        }
+
+        rowXmlList.push(`<row r="${rowNum}" ht="20" customHeight="1">${cells.join('')}</row>`);
+      });
+
+      // Summary Row
+      const sumRowNum = 3 + model.rows.length;
+      rowXmlList.push(
+        `<row r="${sumRowNum}" ht="24" customHeight="1">` +
+        strCell('A' + sumRowNum, '합계', 4) +
+        strCell('B' + sumRowNum, model.summaryText, 5) +
+        ['C', 'D', 'E', 'F', 'G', 'H'].map(c => emptyCell(c + sumRowNum, 5)).join('') +
+        `</row>`
+      );
+
+      const sheetXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+        `<cols>` +
+        `<col min="1" max="1" width="8" customWidth="1"/>` +
+        `<col min="2" max="2" width="14" customWidth="1"/>` +
+        `<col min="3" max="3" width="9" customWidth="1"/>` +
+        `<col min="4" max="4" width="13" customWidth="1"/>` +
+        `<col min="5" max="5" width="8" customWidth="1"/>` +
+        `<col min="6" max="6" width="14" customWidth="1"/>` +
+        `<col min="7" max="7" width="9" customWidth="1"/>` +
+        `<col min="8" max="8" width="13" customWidth="1"/>` +
+        `</cols>` +
+        `<sheetData>${rowXmlList.join('')}</sheetData>` +
+        `<mergeCells count="2">` +
+        `<mergeCell ref="A1:H1"/>` +
+        `<mergeCell ref="B${sumRowNum}:H${sumRowNum}"/>` +
+        `</mergeCells>` +
+        `</worksheet>`;
+
+      const stylesXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+        `<fonts count="3">` +
+        `<font><sz val="10"/><name val="맑은 고딕"/></font>` +
+        `<font><b/><sz val="10"/><name val="맑은 고딕"/></font>` +
+        `<font><b/><sz val="13"/><name val="맑은 고딕"/></font>` +
+        `</fonts>` +
+        `<fills count="4">` +
+        `<fill><patternFill patternType="none"/></fill>` +
+        `<fill><patternFill patternType="gray125"/></fill>` +
+        `<fill><patternFill patternType="solid"><fgColor rgb="FFE5E7EB"/></patternFill></fill>` +
+        `<fill><patternFill patternType="solid"><fgColor rgb="FFF3F4F6"/></patternFill></fill>` +
+        `</fills>` +
+        `<borders count="4">` +
+        `<border><left/><right/><top/><bottom/><diagonal/></border>` +
+        `<border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="medium"><color rgb="FF000000"/></top><bottom style="double"><color rgb="FF000000"/></bottom><diagonal/></border>` +
+        `<border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border>` +
+        `<border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="medium"><color rgb="FF000000"/></bottom><diagonal/></border>` +
+        `</borders>` +
+        `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+        `<cellXfs count="6">` +
+        `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+        `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>` +
+        `<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>` +
+        `<xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>` +
+        `<xf numFmtId="0" fontId="1" fillId="3" borderId="3" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>` +
+        `<xf numFmtId="0" fontId="1" fillId="3" borderId="3" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>` +
+        `</cellXfs>` +
+        `</styleSheet>`;
+
+      const contentTypesXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+        `<Default Extension="rels" ContentType="application/vnd.openxmlformats-officedocument.relationships+xml"/>` +
+        `<Default Extension="xml" ContentType="application/xml"/>` +
+        `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+        `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+        `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+        `</Types>`;
+
+      const relsXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+        `</Relationships>`;
+
+      const workbookRelsXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+        `</Relationships>`;
+
+      const workbookXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+        `<sheets><sheet name="회원별 참여 현황" sheetId="1" r:id="rId1"/></sheets>` +
+        `</workbook>`;
+
+      const enc = new TextEncoder();
+      const xlsxBytes = buildZipArchive([
+        { name: '[Content_Types].xml', bytes: enc.encode(contentTypesXml) },
+        { name: '_rels/.rels', bytes: enc.encode(relsXml) },
+        { name: 'xl/_rels/workbook.xml.rels', bytes: enc.encode(workbookRelsXml) },
+        { name: 'xl/workbook.xml', bytes: enc.encode(workbookXml) },
+        { name: 'xl/styles.xml', bytes: enc.encode(stylesXml) },
+        { name: 'xl/worksheets/sheet1.xml', bytes: enc.encode(sheetXml) }
+      ]);
+      return { xlsxBytes, model };
+    }
+
+    function downloadC1ExcelXlsx() {
+      const onlyActive = document.getElementById('c1-only-active-chk')?.checked ?? true;
+      const { xlsxBytes, model } = buildC1XlsxBytes(onlyActive);
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const filename = `가온누리_회원별_참여현황_C1_${dateStr}.xlsx`;
+
+      const blob = new Blob([xlsxBytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      showToast(`📊 엑셀 파일(${filename})이 다운로드되었습니다! (${model.totalMembers}명 · 총 ${model.totalMeetings}회)`);
+    }
+
     function initApp() {
       // 1. Synchronous initial load from localStorage (ZERO Firebase calls on page load!)
       loadState();
@@ -3736,6 +4133,52 @@
 
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
         <button type="button" onclick="closeSubmitShareModal()" class="rounded-lg bg-slate-200 px-4 py-1.5 text-xs font-bold text-slate-700">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: 가. 회원별 참여 현황[C-1] 엑셀 미리보기 및 다운로드 -->
+  <!-- ========================================================================= -->
+  <div id="c1-excel-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4">
+        <div class="flex items-center gap-2.5">
+          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-xl font-bold text-amber-700">📊</span>
+          <div>
+            <h3 class="text-base sm:text-lg font-black text-slate-900">회원별 참여 현황 [C-1] 엑셀 생성</h3>
+            <p class="text-xs text-slate-500">활동 회차(참여 횟수) 내림차순 정렬 · 2열 병렬 표 · 합계 자동 계산</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeC1ExcelModal()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700">✕</button>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-3 bg-white text-xs">
+        <label class="inline-flex items-center gap-2 font-bold text-slate-700 cursor-pointer select-none">
+          <input
+            id="c1-only-active-chk"
+            type="checkbox"
+            checked
+            onchange="renderC1ExcelPreview()"
+            class="h-4 w-4 rounded accent-blue-600"
+          />
+          <span>참여 횟수 1회 이상 활동회원만 포함 (0회 제외)</span>
+        </label>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onclick="downloadC1ExcelXlsx()"
+            class="rounded-xl bg-emerald-600 px-5 py-2 text-xs sm:text-sm font-black text-white hover:bg-emerald-700 transition shadow-sm">
+            📥 엑셀(.xlsx) 파일 다운로드
+          </button>
+        </div>
+      </div>
+
+      <div id="c1-excel-preview-wrap" class="flex-1 overflow-y-auto p-6 bg-slate-50/50"></div>
+
+      <div class="flex items-center justify-between gap-2 border-t border-slate-200 bg-white px-6 py-3 text-xs text-slate-500">
+        <span>💡 최신 회원 저장 내역까지 포함하려면 관리자 상단 <b>[🔄 클라우드에서 회원 저장 현황 새로고침]</b> 후 생성하세요.</span>
+        <button type="button" onclick="closeC1ExcelModal()" class="rounded-lg bg-slate-200 px-4 py-1.5 font-bold text-slate-700 hover:bg-slate-300">닫기</button>
       </div>
     </div>
   </div>
